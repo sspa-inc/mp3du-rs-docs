@@ -130,3 +130,4 @@ nav:
     - Batch Simulation: examples/batch-simulation.md
     - Boundary Capture: examples/boundary-capture.md
     - Invalid Configs: examples/invalid-configs.md
+    - IFACE Flow Routing: reference/iface-flow-routing.md  

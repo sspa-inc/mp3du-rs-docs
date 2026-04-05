@@ -10,14 +10,13 @@ Common problems and their solutions.
 
 **Solution:**
 
-```bash
-# Install from PyPI (when available)
-pip install mp3du
+Install the wheel directly from the [GitHub Releases page](https://github.com/sspa-inc/mp3du-rs/releases):
 
-# Or build from source
-cd rust-micro-kernel
-maturin develop --release
+```bash
+pip install https://github.com/sspa-inc/mp3du-rs/releases/download/vX.Y.Z/mp3du_py-X.Y.Z-cp38-abi3-win_amd64.whl
 ```
+
+Replace the URL with the actual link to the latest `.whl` asset. See the [Installation guide](../getting-started/install.md) for full instructions.
 
 !!! tip
     Verify you are in the correct virtual environment:
@@ -31,30 +30,6 @@ maturin develop --release
     source .venv/bin/activate
     pip list | grep mp3du
     ```
-
-### `error: can't find Rust compiler`
-
-**Cause:** Rust is not installed or not on the system `PATH`. Required only when building from source.
-
-**Solution:**
-
-Install Rust from [rustup.rs](https://rustup.rs/):
-
-```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-```
-
-On Windows, download and run `rustup-init.exe` from the same URL.
-
-### `maturin` build fails with `pyo3` errors
-
-**Cause:** Python version mismatch or missing Python development headers.
-
-**Solution:**
-
-- Ensure Python ≥ 3.9 is installed
-- On Linux, install the development package: `apt install python3-dev` (Debian/Ubuntu) or `dnf install python3-devel` (Fedora)
-- Ensure `maturin` is up to date: `pip install --upgrade maturin`
 
 ## Configuration Errors
 
@@ -88,10 +63,12 @@ See [Solver Methods](../reference/solver-methods.md) for all solver options.
 
 ```python
 import json
+import urllib.request
 import jsonschema
 
-with open("mp3du-rs/python/mp3du_schema.json") as f:
-    schema = json.load(f)
+schema_url = "https://sspa-inc.github.io/mp3du-rs-docs/assets/raw/mp3du_schema.json"
+with urllib.request.urlopen(schema_url) as response:
+    schema = json.load(response)
 with open("my_config.json") as f:
     config = json.load(f)
 

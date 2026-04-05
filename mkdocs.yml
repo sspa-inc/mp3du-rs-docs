@@ -44,6 +44,10 @@ plugins:
             show_root_full_path: false
             heading_level: 2
             allow_inspection: false
+            show_if_no_docstring: true
+            show_signature_annotations: true
+            separate_signature: true
+            members_order: source
   #- gen-files:
   #    scripts:
   #      - scripts/gen_api_docs.py

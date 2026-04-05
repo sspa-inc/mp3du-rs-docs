@@ -157,5 +157,5 @@ waterloo_inputs = mp3du.hydrate_waterloo_inputs(..., q_vert=q_vert, ...)
 ## Python Routing Helper
 
 The `route_iface_bc_flows()` helper function in `scripts/mp3du_iface_routing.py`
-implements this mapping.  See [IFACE Routing Utility](../../scripts/mp3du_iface_routing.py)
+implements this mapping.  See [IFACE Routing Utility](../scripts/mp3du_iface_routing.py)
 for the reference implementation and unit tests.

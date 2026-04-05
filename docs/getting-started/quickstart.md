@@ -12,6 +12,12 @@ This guide walks through a minimal simulation:
 4. Configure simulation parameters
 5. Run the simulation and inspect results
 
+!!! tip "Using AI agents?"
+    See [AI Agent Prompts](../guides/agent-prompts.md) for copy-paste prompts
+    that prime an agent on the `mp3du` docs, inspect a MODFLOW model folder,
+    generate starter code, and review or debug the result without drifting back
+    to legacy MODPATH assumptions.
+
 ## Complete Example
 
 ```python
@@ -62,7 +68,7 @@ face_neighbor = np.array([], dtype=np.int64)
 
 cell_flows = mp3du.hydrate_cell_flows(
     head=np.full(n_cells, 95.0),
-    water_table=np.full(n_cells, 95.0),
+    water_table=np.full(n_cells, 95.0),  # placeholder only; real models must derive this from layer type
     q_top=np.zeros(n_cells),
     q_bot=np.zeros(n_cells),
     q_vert=np.zeros(n_cells),
@@ -132,6 +138,7 @@ config_dict = {
     },
 }
 config = mp3du.SimulationConfig.from_json(json.dumps(config_dict))
+config.validate()
 
 # ------------------------------------------------------------------
 # 6. Define starting positions and run
@@ -157,6 +164,13 @@ for result in results:
         last = records[-1]
         print(f"  Final position: ({last['x']:.2f}, {last['y']:.2f}, {last['z']:.2f})")
 ```
+
+!!! warning "Do not copy the placeholder `water_table` blindly"
+    In a real MODFLOW model, `water_table` is layer-type dependent. Use
+    `top` for confined layers, `head` for unconfined layers, and `min(head,
+    top)` for convertible layers. See
+    [Units & Conventions](../reference/units-and-conventions.md#elevations-and-saturated-thickness)
+    before adapting this example to production data.
 
 1. Replace these placeholder vertices with your actual cell vertex coordinates from the MODFLOW-USG grid.
 2. The `face_offset` array uses CSR (Compressed Sparse Row) format. See [Units & Conventions](../reference/units-and-conventions.md#array-ordering) for details.

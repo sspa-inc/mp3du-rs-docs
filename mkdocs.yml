@@ -108,6 +108,7 @@ nav:
     - Building Configs: guides/building-configs.md
     - Running Simulations: guides/running-simulations.md
     - Troubleshooting: guides/troubleshooting.md
+    - AI Agent Prompts: guides/agent-prompts.md
   - Reference:
     - reference/index.md
     - Schema Reference: reference/schema-reference.md

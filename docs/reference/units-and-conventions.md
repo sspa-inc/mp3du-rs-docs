@@ -88,6 +88,13 @@ cell_flows_q_well = modflow_q_well        # raw sign (negative = extraction)
 !!! warning "Why q_well is NOT negated"
     The Waterloo method uses singularity subtraction: during **fitting**, the analytic well contribution is subtracted from boundary flux data using $Q_\text{well}$. During **evaluation**, the same analytic term is added back. Both operations must use the **same** $Q_\text{well}$ value. The C++ implementation passes the raw MODFLOW sign (negative for extraction) to both fitting and evaluation. If you negate $Q_\text{well}$ for fitting but not evaluation (or vice versa), the subtraction/addition will not cancel and the velocity field will be **asymmetrically distorted** around the well.
 
+!!! info "Direct `q_well` arrays vs. IFACE-routed `bc_flow`"
+    The raw-sign rule above applies to direct per-cell `q_well` arrays passed to
+    `hydrate_cell_flows()` or `hydrate_waterloo_inputs()`. If you instead start
+    from IFACE-tagged boundary records, keep `bc_flow` in raw MODFLOW sign and
+    let the IFACE routing step apply the documented per-IFACE transformation
+    before accumulating into `q_well`, `q_top`, or `q_bot`.
+
 !!! warning "Why face flow IS negated"
     MODFLOW defines positive face flow as **out of** the cell. The Waterloo fitting algorithm defines positive face flow as **into** the cell (inward normal convention). The C++ implementation (`cls_flowmodel.cpp`) negates face flows when loading them: `cell->cxn_flows[cxn] = -1.0 * (*pdata[m])`. You must do the same.
 

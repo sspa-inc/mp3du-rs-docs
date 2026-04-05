@@ -93,7 +93,7 @@ See the [Schema Reference](../reference/schema-reference.md) for the complete co
 
 ## Required Fields
 
-All top-level fields and most nested fields are required. The only optional field is `capture.capture_radius` (defaults to `null` — strong-sink behaviour). Every other field must be explicitly specified.
+All top-level fields and most nested fields are required. The capture block may omit `capture.capture_radius` (strong-sink behaviour) and the advanced `capture.face_epsilon` override. Every other field shown in the minimal examples must be explicitly specified.
 
 | Field | Type | Constraints | Description |
 |-------|------|-------------|-------------|

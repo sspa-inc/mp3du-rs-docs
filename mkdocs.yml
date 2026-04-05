@@ -1,0 +1,132 @@
+site_name: mod-PATH3DU Documentation
+site_description: 3D particle tracking engine for groundwater flow models
+site_url: "https://example.github.io/mod-PATH3DU/"  # Update with actual GitHub Pages URL
+repo_url: ""  # Set to GitHub repo URL
+repo_name: mod-PATH3DU
+
+theme:
+  name: material
+  features:
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+    - navigation.tabs
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - search.highlight
+    - search.suggest
+    - toc.follow
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+plugins:
+  - search:
+      separator: '[\s\-_]+'
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: ["docs/_stubs"]
+          options:
+            show_source: false
+            show_root_heading: true
+            show_root_full_path: false
+            heading_level: 2
+            allow_inspection: false
+  #- gen-files:
+  #    scripts:
+  #      - scripts/gen_api_docs.py
+  - section-index
+  - social:
+      cards_layout_options:
+        background_color: "#1a237e"
+  - literate-nav:
+      nav_file: SUMMARY.md
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets:
+      base_path: .
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
+  - attr_list
+  - admonition
+  - md_in_html
+  - toc:
+      permalink: true
+  - def_list
+
+extra_javascript:
+  - https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js
+  - https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js
+
+extra_css:
+  - https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - getting-started/index.md
+    - Installation: getting-started/install.md
+    - Quickstart: getting-started/quickstart.md
+  - Concepts:
+    - concepts/index.md
+    - Geometry: concepts/geometry.md
+    - Dispersion Theory: concepts/dispersion-theory.md
+    - Adaptive Stepping: concepts/adaptive-stepping.md
+    - IFACE & Boundary Capture: concepts/iface-boundary-capture.md
+  - Guides:
+    - guides/index.md
+    - Building Configs: guides/building-configs.md
+    - Running Simulations: guides/running-simulations.md
+    - Troubleshooting: guides/troubleshooting.md
+  - Reference:
+    - reference/index.md
+    - Schema Reference: reference/schema-reference.md
+    - Python API:
+      - reference/python-api/index.md
+      - WaterlooConfig: reference/python-api/WaterlooConfig.md
+      - SimulationConfig: reference/python-api/SimulationConfig.md
+      - ParticleStart: reference/python-api/ParticleStart.md
+      - TrajectoryResult: reference/python-api/TrajectoryResult.md
+      - GridHandle: reference/python-api/GridHandle.md
+      - WaterlooFieldHandle: reference/python-api/WaterlooFieldHandle.md
+      - CellProperties: reference/python-api/CellProperties.md
+      - CellFlows: reference/python-api/CellFlows.md
+      - WaterlooInputs: reference/python-api/WaterlooInputs.md
+      - Functions: reference/python-api/functions.md
+    - Solver Methods: reference/solver-methods.md
+    - Dispersion Methods: reference/dispersion-methods.md
+    - Error Diagnostics: reference/error-diagnostics.md
+    - Units & Conventions: reference/units-and-conventions.md
+  - Examples:
+    - examples/index.md
+    - Minimal Config: examples/minimal-config.md
+    - Complete Config: examples/complete-config.md
+    - Minimal Python Script: examples/minimal-python-script.md
+    - Batch Simulation: examples/batch-simulation.md
+    - Boundary Capture: examples/boundary-capture.md
+    - Invalid Configs: examples/invalid-configs.md

@@ -1,0 +1,125 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MP3DU SimulationConfig",
+  "type": "object",
+  "required": [
+    "velocity_method",
+    "solver",
+    "adaptive",
+    "dispersion",
+    "retardation_enabled",
+    "capture",
+    "initial_dt",
+    "max_dt",
+    "direction"
+  ],
+  "properties": {
+    "velocity_method": {
+      "type": "string",
+      "enum": ["Waterloo"]
+    },
+    "solver": {
+      "type": "string",
+      "enum": [
+        "Euler",
+        "Rk4StepDoubling",
+        "DormandPrince",
+        "CashKarp",
+        "VernerRobust",
+        "VernerEfficient"
+      ]
+    },
+    "adaptive": {
+      "type": "object",
+      "required": [
+        "tolerance",
+        "safety",
+        "alpha",
+        "min_scale",
+        "max_scale",
+        "max_rejects",
+        "min_dt",
+        "euler_dt"
+      ],
+      "properties": {
+        "tolerance": { "type": "number", "exclusiveMinimum": 0 },
+        "safety": { "type": "number", "exclusiveMinimum": 0 },
+        "alpha": { "type": "number", "exclusiveMinimum": 0 },
+        "min_scale": { "type": "number", "exclusiveMinimum": 0 },
+        "max_scale": { "type": "number", "exclusiveMinimum": 0 },
+        "max_rejects": { "type": "integer", "minimum": 0 },
+        "min_dt": { "type": "number", "exclusiveMinimum": 0 },
+        "euler_dt": { "type": "number", "exclusiveMinimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "dispersion": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["method"],
+          "properties": {
+            "method": { "const": "None" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["method", "alpha_l", "alpha_th", "alpha_tv"],
+          "properties": {
+            "method": { "const": "Gsde" },
+            "alpha_l": { "type": "number", "minimum": 0 },
+            "alpha_th": { "type": "number", "minimum": 0 },
+            "alpha_tv": { "type": "number", "minimum": 0 }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["method", "alpha_l", "alpha_th", "alpha_tv"],
+          "properties": {
+            "method": { "const": "Ito" },
+            "alpha_l": { "type": "number", "minimum": 0 },
+            "alpha_th": { "type": "number", "minimum": 0 },
+            "alpha_tv": { "type": "number", "minimum": 0 }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "retardation_enabled": {
+      "type": "boolean"
+    },
+    "capture": {
+      "type": "object",
+      "required": [
+        "max_time",
+        "max_steps",
+        "stagnation_velocity",
+        "stagnation_limit"
+      ],
+      "properties": {
+        "max_time": { "type": "number", "exclusiveMinimum": 0 },
+        "max_steps": { "type": "integer", "minimum": 1 },
+        "stagnation_velocity": { "type": "number", "minimum": 0 },
+        "stagnation_limit": { "type": "integer", "minimum": 1 },
+        "capture_radius": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Distance from well centre (cell centre) within which a particle is captured. Omit or set to null for immediate capture on cell entry."
+        },
+        "face_epsilon": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 1e-6,
+          "description": "Tolerance for top/bottom face proximity checks during IFACE-based capture. Particle is considered at the face when z > 1 - face_epsilon (top) or z < face_epsilon (bottom). Default: 1e-6."
+        }
+      },
+      "additionalProperties": false
+    },
+    "initial_dt": { "type": "number", "exclusiveMinimum": 0 },
+    "max_dt": { "type": "number", "exclusiveMinimum": 0 },
+    "direction": { "type": "number", "enum": [1.0, -1.0] }
+  },
+  "additionalProperties": false
+}

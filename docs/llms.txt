@@ -1,0 +1,40 @@
+# mod-PATH3DU
+
+> 3D particle tracking engine for groundwater flow models.
+> Rust core with Python bindings via PyO3.
+
+## Import
+
+    import mp3du  # canonical import
+
+## Key Types
+
+- SimulationConfig: simulation parameters (from JSON or Python)
+- WaterlooConfig: velocity interpolation configuration
+- ParticleStart: initial particle position and cell
+- TrajectoryResult: particle path and final status
+- GridHandle: loaded unstructured grid
+- WaterlooFieldHandle: fitted velocity field
+- CellProperties: per-cell physical properties
+- CellFlows: per-cell flow budget arrays
+
+## Links
+
+- Full reference: <site-url>/reference/
+- Schema: <site-url>/reference/schema-reference/
+- Python API: <site-url>/reference/python-api/
+- Quickstart: <site-url>/getting-started/quickstart/
+- Examples: <site-url>/examples/
+- Full machine-readable reference: <site-url>/llms-full.txt
+
+## ⚠️ Critical Pitfall: Water Table vs Layer Type
+
+The `water_table` array in `hydrate_cell_flows()` controls saturated thickness
+which directly divides velocity. It MUST match the MODFLOW layer type (LAYTYP):
+
+    LAYTYP==0 (confined)    → water_table = top   (NOT head!)
+    LAYTYP==1 (unconfined)  → water_table = head
+    LAYTYP>0  (convertible) → water_table = min(head, top)
+
+Setting water_table=head for confined layers silently produces 2×–17× velocity
+errors. See llms-full.txt and docs/reference/units-and-conventions.md.

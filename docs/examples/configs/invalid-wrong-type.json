@@ -1,0 +1,27 @@
+{
+  "velocity_method": "Waterloo",
+  "solver": 42,
+  "adaptive": {
+    "tolerance": 1e-6,
+    "safety": 0.9,
+    "alpha": 0.2,
+    "min_scale": 0.2,
+    "max_scale": 5.0,
+    "max_rejects": 10,
+    "min_dt": 1e-10,
+    "euler_dt": 1.0
+  },
+  "dispersion": {
+    "method": "None"
+  },
+  "retardation_enabled": false,
+  "capture": {
+    "max_time": 365250.0,
+    "max_steps": 1000000,
+    "stagnation_velocity": 1e-12,
+    "stagnation_limit": 100
+  },
+  "initial_dt": 1.0,
+  "max_dt": 100.0,
+  "direction": 1.0
+}

@@ -1,6 +1,6 @@
 site_name: mod-PATH3DU Documentation
 site_description: 3D particle tracking engine for groundwater flow models
-site_url: "https://example.github.io/mod-PATH3DU/"  # Update with actual GitHub Pages URL
+site_url: "https://sspa-inc.github.io/mp3du-rs-docs/"
 repo_url: ""  # Set to GitHub repo URL
 repo_name: mod-PATH3DU
 

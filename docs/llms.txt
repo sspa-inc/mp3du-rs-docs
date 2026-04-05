@@ -20,12 +20,12 @@
 
 ## Links
 
-- Full reference: <site-url>/reference/
-- Schema: <site-url>/reference/schema-reference/
-- Python API: <site-url>/reference/python-api/
-- Quickstart: <site-url>/getting-started/quickstart/
-- Examples: <site-url>/examples/
-- Full machine-readable reference: <site-url>/llms-full.txt
+- Full reference: https://sspa-inc.github.io/mp3du-rs-docs/reference/
+- Schema: https://sspa-inc.github.io/mp3du-rs-docs/reference/schema-reference/
+- Python API: https://sspa-inc.github.io/mp3du-rs-docs/reference/python-api/
+- Quickstart: https://sspa-inc.github.io/mp3du-rs-docs/getting-started/quickstart/
+- Examples: https://sspa-inc.github.io/mp3du-rs-docs/examples/
+- Full machine-readable reference: https://sspa-inc.github.io/mp3du-rs-docs/llms-full.txt
 
 ## ⚠️ Critical Pitfall: Water Table vs Layer Type
 

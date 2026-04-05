@@ -61,6 +61,43 @@ class WaterlooFieldHandle:
     def n_cells(self) -> int: ...
 
 
+# Alias — fit_sspa() and fit_waterloo() both return the same handle type.
+VelocityFieldHandle = WaterlooFieldHandle
+
+
+class SspaConfig:
+    def __init__(self, search_radius: float, krig_offset: float = 0.1) -> None: ...
+    @property
+    def search_radius(self) -> float: ...
+    @property
+    def krig_offset(self) -> float: ...
+
+
+class SspaInputs:
+    def n_cells(self) -> int: ...
+
+
+def hydrate_sspa_inputs(
+    heads: npt.NDArray[np.float64],
+    porosity: npt.NDArray[np.float64],
+    well_mask: npt.NDArray[np.bool_],
+    hhk: npt.NDArray[np.float64],
+) -> SspaInputs: ...
+
+
+def fit_sspa(
+    config: SspaConfig,
+    grid: GridHandle,
+    inputs: SspaInputs,
+    drifts: List[Dict[str, Any]],
+) -> VelocityFieldHandle:
+    """Fit the SSP&A (kriging-based) velocity field.
+
+    Consumes the GridHandle (it will no longer be loaded after the call).
+    """
+    ...
+
+
 class CellProperties:
     @property
     def top(self) -> List[float]: ...
@@ -150,7 +187,16 @@ def hydrate_cell_flows(
     bc_type_names: Optional[List[str]] = None,
     is_domain_boundary: Optional[npt.NDArray[np.bool_]] = None,
     has_water_table: Optional[npt.NDArray[np.bool_]] = None,
-) -> CellFlows: ...
+) -> CellFlows:
+    """Hydrate cell flow data from NumPy arrays.
+
+    Sign conventions (pass raw MODFLOW values — no negation):
+      - face_flow: positive = out of cell (MODFLOW CBC convention).
+      - q_well: negative = extraction, positive = injection (raw MODFLOW sign).
+
+    See docs/reference/units-and-conventions.md for the full reference.
+    """
+    ...
 
 
 def hydrate_waterloo_inputs(
@@ -169,7 +215,20 @@ def hydrate_waterloo_inputs(
     face_length: npt.NDArray[np.float64],
     face_flow: npt.NDArray[np.float64],
     noflow_mask: npt.NDArray[np.bool_],
-) -> WaterlooInputs: ...
+) -> WaterlooInputs:
+    """Hydrate Waterloo velocity-fitting inputs from NumPy arrays.
+
+    Sign conventions (CRITICAL — differs from hydrate_cell_flows):
+      - face_flow: positive = INTO cell (Waterloo convention).
+        Negate MODFLOW CBC output: ``waterloo_face_flow = -modflow_face_flow``.
+      - q_well: raw MODFLOW sign (negative = extraction). Do NOT negate.
+        The Waterloo method subtracts the analytic well singularity
+        during fitting and adds it back during evaluation; both must
+        use the same sign.
+
+    See docs/reference/units-and-conventions.md for the full reference.
+    """
+    ...
 
 
 def build_grid(
@@ -184,12 +243,32 @@ def fit_waterloo(
     fit_inputs: WaterlooInputs,
     cell_properties: CellProperties,
     cell_flows: CellFlows,
-) -> WaterlooFieldHandle: ...
+) -> WaterlooFieldHandle:
+    """Fit the Waterloo velocity field.
+
+    Consumes the GridHandle (it will no longer be loaded after the call).
+    Well locations are derived automatically from cell_flows.has_well
+    and the grid cell centres.
+
+    Sign conventions: fit_inputs must use Waterloo conventions
+    (face flow positive = into cell; q_well = raw MODFLOW sign).
+    See hydrate_waterloo_inputs() and docs/reference/units-and-conventions.md.
+    """
+    ...
 
 
 def run_simulation(
     config: SimulationConfig,
-    velocity_field: WaterlooFieldHandle,
+    velocity_field: VelocityFieldHandle,
     particles: List[ParticleStart],
     parallel: bool = True,
-) -> List[TrajectoryResult]: ...
+) -> List[TrajectoryResult]:
+    """Run particle tracking on a fitted velocity field.
+
+    Well capture is controlled by capture.capture_radius in the
+    SimulationConfig:
+      - Omitted / null: capture immediately on cell entry (strong sink).
+      - A positive number (e.g. 0.5): capture only when within that
+        distance of the cell centre (weak sink).
+    """
+    ...

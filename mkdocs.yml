@@ -97,6 +97,7 @@ nav:
     - getting-started/index.md
     - Installation: getting-started/install.md
     - Quickstart: getting-started/quickstart.md
+    - AI Agent Prompts: guides/agent-prompts.md
   - Concepts:
     - concepts/index.md
     - Geometry: concepts/geometry.md
@@ -108,7 +109,6 @@ nav:
     - Building Configs: guides/building-configs.md
     - Running Simulations: guides/running-simulations.md
     - Troubleshooting: guides/troubleshooting.md
-    - AI Agent Prompts: guides/agent-prompts.md
   - Reference:
     - reference/index.md
     - Schema Reference: reference/schema-reference.md

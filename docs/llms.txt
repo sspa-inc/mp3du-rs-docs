@@ -58,13 +58,21 @@ Convert once, then pass the SAME array to both.
 
 Never negate q_well. See llms-full.txt for the full conversion reference.
 
-## ⚠️ Critical Pitfall: Vertex Winding (CW REQUIRED)
+## ⚠️ Critical Pitfall: Vertex Winding and Face Index Alignment
 
 All cell polygons passed to `build_grid()` MUST be wound Clockwise (CW)
 when viewed from above. There is NO runtime validation — wrong
 winding silently inverts face normals and produces a 180° reversed
 velocity field. If your source uses CCW winding, reverse the vertex list
 and negate all face_flow values.
+
+CRITICAL: face indexing is defined by vertex order. If you reorder
+vertices, you MUST reorder every face-level array the same way
+(`face_flow`, `face_neighbor`, `face_vx1/vy1/vx2/vy2`, `face_length`,
+`noflow_mask`, and any source-specific face/neighbour IDs).
+Reversing only the vertex list while still iterating neighbour/face IDs
+in the original order misaligns flows with geometric edges and can flip
+velocity directions even when the scalar flow signs are otherwise correct.
 
 ## ⚠️ Critical Pitfall: Z Coordinate is Local [0, 1]
 

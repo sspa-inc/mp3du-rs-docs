@@ -565,6 +565,15 @@ All face-level arrays (`face_flow`, `face_vx1/vy1/vx2/vy2`,
 indexing.  `face_vx1[i], face_vy1[i]` = start vertex of face i;
 `face_vx2[i], face_vy2[i]` = end vertex of face i.
 
+CRITICAL: if your source format provides per-face neighbour IDs or other
+face metadata tied to the original vertex order, those arrays are part of
+this same indexing contract. If you reverse or otherwise reorder the
+vertex list to enforce CW winding, you MUST reorder the corresponding
+face/neighbour arrays identically. Reversing only the vertices while
+iterating neighbour IDs in the original order misaligns `face_flow` with
+geometric edges and can produce a reversed velocity field even when the
+assembled flow signs are correct.
+
 ### Face Segment Alignment
 
 The `face_vx1/vy1/vx2/vy2` arrays in `hydrate_waterloo_inputs()` MUST

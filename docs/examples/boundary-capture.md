@@ -131,7 +131,7 @@ waterloo_inputs = mp3du.hydrate_waterloo_inputs(
     face_vx1=face_vx1, face_vy1=face_vy1,
     face_vx2=face_vx2, face_vy2=face_vy2,
     face_length=face_length,
-    face_flow=-face_flow_array,    # NEGATE for Waterloo convention
+    face_flow=face_flow_array,    # same array — positive = INTO cell
     noflow_mask=noflow_mask,
 )
 

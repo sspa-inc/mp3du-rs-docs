@@ -84,9 +84,14 @@ class ParticleStart:
 
     Attributes:
         id: User-supplied integer identifier for this particle.
-        x: Starting X coordinate (model units).
-        y: Starting Y coordinate (model units).
-        z: Starting Z coordinate (model units, elevation).
+        x: Starting X coordinate (model units, global).
+        y: Starting Y coordinate (model units, global).
+        z: Starting Z coordinate — **local normalized value in [0, 1]**.
+            ``0.0`` = cell bottom, ``1.0`` = cell top, ``0.5`` = layer
+            midpoint.  This is **NOT** a physical elevation.  To convert:
+            ``z_local = (z_physical - bot) / (top - bot)``.
+            Passing a physical elevation (e.g. ``z=5.0`` when ``top=10,
+            bot=0``) causes immediate ``ExitedDomain`` because ``5.0 > 1.0``.
         cell_id: Zero-based index of the MODFLOW cell that contains the
             particle's starting position.
         initial_dt: Initial time-step size for the adaptive tracker (model
@@ -321,7 +326,7 @@ class CellFlows:
 
     !!! note "Sign conventions"
         Pass raw MODFLOW values — **do not negate**.
-        ``face_flow`` positive = out of cell (MODFLOW CBC convention).
+        ``face_flow`` positive = into cell (MODFLOW-USG / MF6 convention).
         ``q_well`` negative = extraction, positive = injection.
     """
 
@@ -377,7 +382,7 @@ class CellFlows:
 
     @property
     def face_flow(self) -> List[float]:
-        """Face-by-face volumetric fluxes (L³/T).  Positive = out of cell."""
+        """Face-by-face volumetric fluxes (L³/T).  Positive = into cell."""
         ...
 
     @property
@@ -396,10 +401,10 @@ class WaterlooInputs:
 
     Produced by `hydrate_waterloo_inputs()`.  Pass to `fit_waterloo()`.
 
-    !!! warning "Sign convention differs from CellFlows"
-        ``face_flow`` here uses the **Waterloo convention** (positive = INTO
-        cell), which is the **opposite** of the MODFLOW CBC convention.
-        Negate MODFLOW face flows before calling `hydrate_waterloo_inputs()`.
+    !!! note "Sign convention"
+        ``face_flow`` here uses the same convention as ``CellFlows``
+        (positive = INTO cell).  Pass the **same** ``face_flow`` array
+        to both ``hydrate_cell_flows()`` and ``hydrate_waterloo_inputs()``.
     """
 
     def n_cells(self) -> int:
@@ -467,11 +472,23 @@ def hydrate_cell_flows(
 ) -> CellFlows:
     """Hydrate cell flow data from NumPy arrays.
 
-    Sign conventions (pass raw MODFLOW values — no negation):
-      - face_flow: positive = out of cell (MODFLOW CBC convention).
-      - q_well: negative = extraction, positive = injection (raw MODFLOW sign).
+    mp3du API convention (target):
 
-    See docs/reference/units-and-conventions.md for the full reference.
+    - ``face_flow``: positive = **into** cell.
+    - ``q_well``: negative = extraction, positive = injection (raw MODFLOW sign).
+
+    The transformation from raw MODFLOW output depends on version:
+
+    - **MODFLOW-USG / MF6** (``FLOW-JA-FACE``): raw is positive = IN.
+      **Pass directly**: ``face_flow = flowja``.
+    - **MODFLOW-2005 / NWT** (after directional→per-face assembly):
+      result is positive = OUT. **Negate**: ``face_flow = -assembled``.
+
+    Pass the **same** ``face_flow`` array to both ``hydrate_cell_flows()``
+    and ``hydrate_waterloo_inputs()``.  No per-function negation needed.
+
+    Never negate ``q_well``.
+    See ``docs/reference/units-and-conventions.md`` for the full reference.
     """
     ...
 
@@ -495,15 +512,17 @@ def hydrate_waterloo_inputs(
 ) -> WaterlooInputs:
     """Hydrate Waterloo velocity-fitting inputs from NumPy arrays.
 
-    Sign conventions (CRITICAL — differs from hydrate_cell_flows):
-      - face_flow: positive = INTO cell (Waterloo convention).
-        Negate MODFLOW CBC output: ``waterloo_face_flow = -modflow_face_flow``.
-      - q_well: raw MODFLOW sign (negative = extraction). Do NOT negate.
-        The Waterloo method subtracts the analytic well singularity
-        during fitting and adds it back during evaluation; both must
-        use the same sign.
+    mp3du API convention (target):
 
-    See docs/reference/units-and-conventions.md for the full reference.
+    - ``face_flow``: positive = **INTO** cell — same as ``hydrate_cell_flows()``.
+    - ``q_well``: raw MODFLOW sign (negative = extraction). **Do NOT negate.**
+
+    Pass the **same** ``face_flow`` array used for ``hydrate_cell_flows()``.
+    No per-function negation or sign flip is needed.
+
+    The Waterloo method subtracts the analytic well singularity during fitting
+    and adds it back during evaluation; both must use the same ``q_well`` sign.
+    See ``docs/reference/units-and-conventions.md`` for the full reference.
     """
     ...
 
@@ -541,8 +560,8 @@ def fit_waterloo(
     Well locations are derived automatically from cell_flows.has_well
     and the grid cell centres.
 
-    Sign conventions: fit_inputs must use Waterloo conventions
-    (face flow positive = into cell; q_well = raw MODFLOW sign).
+    Sign conventions: fit_inputs must use face_flow positive = INTO cell
+    (same array as hydrate_cell_flows; q_well = raw MODFLOW sign).
     See hydrate_waterloo_inputs() and docs/reference/units-and-conventions.md.
     """
     ...

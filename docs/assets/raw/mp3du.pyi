@@ -154,7 +154,7 @@ def hydrate_cell_flows(
     """Hydrate cell flow data from NumPy arrays.
 
     Sign conventions (pass raw MODFLOW values — no negation):
-      - face_flow: positive = out of cell (MODFLOW CBC convention).
+      - face_flow: positive = into cell (MODFLOW-USG / MF6 convention).
       - q_well: negative = extraction, positive = injection (raw MODFLOW sign).
 
     See docs/reference/units-and-conventions.md for the full reference.
@@ -181,9 +181,9 @@ def hydrate_waterloo_inputs(
 ) -> WaterlooInputs:
     """Hydrate Waterloo velocity-fitting inputs from NumPy arrays.
 
-    Sign conventions (CRITICAL — differs from hydrate_cell_flows):
-      - face_flow: positive = INTO cell (Waterloo convention).
-        Negate MODFLOW CBC output: ``waterloo_face_flow = -modflow_face_flow``.
+    Sign conventions (same as hydrate_cell_flows):
+      - face_flow: positive = INTO cell.
+        Pass the SAME face_flow array as hydrate_cell_flows — no negation.
       - q_well: raw MODFLOW sign (negative = extraction). Do NOT negate.
         The Waterloo method subtracts the analytic well singularity
         during fitting and adds it back during evaluation; both must
@@ -213,8 +213,8 @@ def fit_waterloo(
     Well locations are derived automatically from cell_flows.has_well
     and the grid cell centres.
 
-    Sign conventions: fit_inputs must use Waterloo conventions
-    (face flow positive = into cell; q_well = raw MODFLOW sign).
+    Sign conventions: fit_inputs must use face_flow positive = INTO cell
+    (same array as hydrate_cell_flows; q_well = raw MODFLOW sign).
     See hydrate_waterloo_inputs() and docs/reference/units-and-conventions.md.
     """
     ...

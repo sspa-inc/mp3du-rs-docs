@@ -38,3 +38,32 @@ which directly divides velocity. It MUST match the MODFLOW layer type (LAYTYP):
 
 Setting water_table=head for confined layers silently produces 2×–17× velocity
 errors. See llms-full.txt and docs/reference/units-and-conventions.md.
+
+## ⚠️ Critical Pitfall: Face Flow Signs Depend on MODFLOW Version
+
+Both hydrate_cell_flows() and hydrate_waterloo_inputs() expect face_flow
+with positive = INTO cell (flow entering the cell through that face).
+Convert once, then pass the SAME array to both.
+
+    MODFLOW-USG / MF6 (FLOW-JA-FACE): raw positive = INTO cell
+        face_flow = flowja                   # pass directly — already positive = INTO
+
+    MODFLOW-2005 / NWT: raw stores DIRECTIONAL flows (positive = in direction
+    of increasing row/column), NOT per-cell flows.  You must assemble into
+    per-cell per-face flows first (flip sign for reverse-direction neighbors).
+    After assembly the result is positive = OUT — negate once:
+        face_flow = -assembled               # negate once → positive = INTO
+
+    # Pass face_flow to BOTH functions — no per-function negation.
+
+Never negate q_well. See llms-full.txt for the full conversion reference.
+
+## ⚠️ Critical Pitfall: Z Coordinate is Local [0, 1]
+
+ParticleStart.z and trajectory output z are LOCAL normalized coordinates
+(0 = cell bottom, 1 = cell top, 0.5 = midpoint), NOT physical elevations.
+Passing a physical elevation (e.g. z=5.0 when top=10, bot=0) causes
+immediate ExitedDomain.
+
+    z_local = (z_physical - bot) / (top - bot)
+    z_physical = bot + z_local * (top - bot)

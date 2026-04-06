@@ -35,10 +35,21 @@ class SimulationConfig:
 
 
 class ParticleStart:
+    """Starting position for a particle.
+
+    CRITICAL — z is a LOCAL normalized coordinate in [0, 1], NOT a
+    physical elevation.  0.0 = cell bottom, 1.0 = cell top,
+    0.5 = layer midpoint.  If you pass a physical elevation
+    (e.g. 5.0 when top=10 and bot=0) the tracker will exit the
+    cell immediately with ExitedDomain.
+
+    To convert a physical elevation to local z:
+        z_local = (z_physical - bot) / (top - bot)
+    """
     id: int
     x: float
     y: float
-    z: float
+    z: float  # LOCAL [0, 1]: 0 = cell bottom, 1 = cell top
     cell_id: int
     initial_dt: float
     def __init__(
@@ -46,13 +57,22 @@ class ParticleStart:
         id: int,
         x: float,
         y: float,
-        z: float,
+        z: float,  # LOCAL [0, 1]: 0 = cell bottom, 1 = cell top
         cell_id: int,
         initial_dt: float,
     ) -> None: ...
 
 
 class TrajectoryResult:
+    """Result of tracking one particle.
+
+    to_records() returns dicts with keys:
+        step, time, x, y, z, vx, vy, vz, cell_id, dt
+
+    CRITICAL — the output 'z' is also LOCAL [0, 1], not a physical
+    elevation.  To convert back to global elevation:
+        z_global = bot[cell_id] + z * (top[cell_id] - bot[cell_id])
+    """
     particle_id: int
     final_status: str
     termination_reason: str
@@ -163,10 +183,21 @@ def hydrate_cell_flows(
 ) -> CellFlows:
     """Hydrate cell flow data from NumPy arrays.
 
-    Sign conventions (pass raw MODFLOW values — no negation):
-      - face_flow: positive = out of cell (MODFLOW CBC convention).
+    mp3du API convention (target):
+      - face_flow: positive = INTO cell.
       - q_well: negative = extraction, positive = injection (raw MODFLOW sign).
 
+    CRITICAL — the transformation depends on your MODFLOW version:
+      - MODFLOW-USG / MF6 (FLOW-JA-FACE): raw is positive = IN → pass directly.
+            face_flow = flowja
+      - MODFLOW-2005/NWT (FLOW RIGHT FACE etc.): after directional→per-face
+        assembly the result is positive = OUT → negate once.
+            face_flow = -assembled_face_flow
+
+    Pass the SAME face_flow array to both hydrate_cell_flows() and
+    hydrate_waterloo_inputs(). No per-function negation needed.
+
+    Never negate q_well.
     See docs/reference/units-and-conventions.md for the full reference.
     """
     ...
@@ -191,13 +222,16 @@ def hydrate_waterloo_inputs(
 ) -> WaterlooInputs:
     """Hydrate Waterloo velocity-fitting inputs from NumPy arrays.
 
-    Sign conventions (CRITICAL — differs from hydrate_cell_flows):
-      - face_flow: positive = INTO cell (Waterloo convention).
-        Negate MODFLOW CBC output: ``waterloo_face_flow = -modflow_face_flow``.
+    mp3du API convention (target):
+      - face_flow: positive = INTO cell — same as hydrate_cell_flows().
       - q_well: raw MODFLOW sign (negative = extraction). Do NOT negate.
-        The Waterloo method subtracts the analytic well singularity
-        during fitting and adds it back during evaluation; both must
-        use the same sign.
+
+    Pass the SAME face_flow array used for hydrate_cell_flows().
+    No per-function negation or sign flip is needed.
+
+    The Waterloo method subtracts the analytic well singularity
+    during fitting and adds it back during evaluation; both must
+    use the same q_well sign.
 
     See docs/reference/units-and-conventions.md for the full reference.
     """
@@ -207,7 +241,28 @@ def hydrate_waterloo_inputs(
 def build_grid(
     vertices: List[List[Tuple[float, float]]],
     centers: List[Tuple[float, float, float]],
-) -> GridHandle: ...
+) -> GridHandle:
+    """Build the computational grid from cell polygons.
+
+    CRITICAL — Vertex Winding Order:
+      Vertices for each cell MUST be ordered Clockwise (CW)
+      when viewed from above (looking down the -Z axis).  The code
+      does NOT validate winding; wrong winding silently flips face
+      normals and produces an inverted velocity field.
+
+      Face indexing: face i is the edge from vertex[i] to
+      vertex[(i+1) % n_vertices].  This determines which
+      face_flow[i] and face_vx1/vy1/vx2/vy2[i] values correspond
+      to which edge.
+
+    Example — a 10×10 square cell (CW):
+        vertices = [[(0,0), (0,10), (10,10), (10,0)]]
+        # face 0: (0,0)→(0,10)   = left edge
+        # face 1: (0,10)→(10,10) = top edge
+        # face 2: (10,10)→(10,0) = right edge
+        # face 3: (10,0)→(0,0)   = bottom edge
+    (If your source uses CCW winding, reverse the vertex list and negate all face_flow values.)"""
+    ...
 
 
 def fit_waterloo(
@@ -223,8 +278,8 @@ def fit_waterloo(
     Well locations are derived automatically from cell_flows.has_well
     and the grid cell centres.
 
-    Sign conventions: fit_inputs must use Waterloo conventions
-    (face flow positive = into cell; q_well = raw MODFLOW sign).
+    Sign conventions: fit_inputs must use face_flow positive = INTO cell
+    (same array as hydrate_cell_flows; q_well = raw MODFLOW sign).
     See hydrate_waterloo_inputs() and docs/reference/units-and-conventions.md.
     """
     ...
@@ -482,6 +537,181 @@ for ci in range(n_cells):
     if lt == 0:    wt_arr[ci] = cell_top[ci]          # confined
     elif lt == 1:  wt_arr[ci] = head_arr[ci]           # unconfined
     else:          wt_arr[ci] = min(head_arr[ci], cell_top[ci])  # convertible
+```
+
+## Cell Geometry and Face Ordering Rules
+
+### Vertex Winding (CW REQUIRED)
+
+All cell polygons passed to `build_grid()` MUST be wound Clockwise (CW)
+when viewed from above.  There is NO runtime validation — wrong
+winding silently inverts face normals and produces a 180° reversed
+velocity field.
+
+Test: compute the signed area via the shoelace formula.  Negative = CW.
+If your source uses CCW winding, reverse the vertex list and negate all face_flow values.
+
+### Face-to-Vertex Mapping
+
+For a cell with N vertices [v0, v1, ..., v_{N-1}]:
+
+    face 0 = edge v0 → v1
+    face 1 = edge v1 → v2
+    ...
+    face N-1 = edge v_{N-1} → v0
+
+All face-level arrays (`face_flow`, `face_vx1/vy1/vx2/vy2`,
+`face_length`, `face_neighbor`, `noflow_mask`) MUST follow this
+indexing.  `face_vx1[i], face_vy1[i]` = start vertex of face i;
+`face_vx2[i], face_vy2[i]` = end vertex of face i.
+
+### Face Segment Alignment
+
+The `face_vx1/vy1/vx2/vy2` arrays in `hydrate_waterloo_inputs()` MUST
+match the grid vertices exactly.  For cell polygons passed to
+`build_grid(vertices=[[v0, v1, v2, v3]])`, use:
+
+```python
+face_vx1 = [v0.x, v1.x, v2.x, v3.x]
+face_vy1 = [v0.y, v1.y, v2.y, v3.y]
+face_vx2 = [v1.x, v2.x, v3.x, v0.x]
+face_vy2 = [v1.y, v2.y, v3.y, v0.y]
+```
+
+### Flow Sign Summary (Quick Reference)
+
+mp3du uses a single face_flow convention for BOTH hydrate functions:
+**positive = INTO cell** (flow entering the cell through that face).
+This matches the MODFLOW-USG / MF6 FLOW-JA-FACE convention directly;
+MODFLOW-2005/NWT users must negate after assembly.
+
+IMPORTANT — Raw MODFLOW-2005/NWT stores directional inter-cell flows, not
+per-cell flows.  The raw convention is positive in the direction of
+increasing row or column number:
+    FLOW RIGHT FACE at (row,col): positive = flow from (row,col) → (row,col+1)
+    FLOW FRONT FACE at (row,col): positive = flow from (row,col) → (row+1,col)
+A single stored value is simultaneously an outflow for one cell and an
+inflow for the other.  You MUST assemble these into per-cell per-face
+flows (flipping the sign for reverse-direction neighbors) before passing
+to mp3du.  After assembly, the result is positive = OUT — negate once.
+
+Transformation depends on MODFLOW version:
+
+    ── MODFLOW-USG / MF6 (FLOW-JA-FACE / FLOWJA: raw positive = IN) ──
+    face_flow = flowja                   # pass directly — already positive = INTO
+
+    ── MODFLOW-2005 / NWT (after directional → per-face assembly) ──
+    # During assembly, for cell (r,c):
+    #   right neighbor: flow = +frf[r,c]       (same direction → OUT)
+    #   left neighbor:  flow = -frf[r,c-1]     (reverse direction → OUT)
+    #   front neighbor: flow = +fff[r,c]       (same direction → OUT)
+    #   back neighbor:  flow = -fff[r-1,c]     (reverse direction → OUT)
+    face_flow = -assembled               # negate once → positive = INTO
+
+    # Pass face_flow to BOTH hydrate_cell_flows() and
+    # hydrate_waterloo_inputs(). No per-function negation needed.
+
+Never negate q_well. Pass raw MODFLOW sign to BOTH functions.
+
+### WaterlooConfig Tuning
+
+The defaults (`order_of_approx=35`, `n_control_points=122`) are tuned for
+complex multi-cell unstructured meshes.  For simple geometries (e.g. a
+single rectangular cell) they cause numerical oscillations (Runge's
+phenomenon) that create spurious eddies.
+
+Guideline: `order_of_approx` ≤ (number of faces × 2) for simple cells.
+For a 4-sided cell, use `order_of_approx=3` to `5`.
+
+## Worked Example — Single Rectangular Cell
+
+This minimal example tracks one particle through a 10×10 cell with
+flow entering from the left and exiting through the right and top.
+
+```python
+import json, numpy as np, mp3du
+
+# ── 1. Grid (CW vertices) ──
+vertices = [[(0.0, 0.0), (0.0, 10.0), (10.0, 10.0), (10.0, 0.0)]]
+centers  = [(5.0, 5.0, 5.0)]
+grid = mp3du.build_grid(vertices, centers)
+# face 0: left  (0,0)→(0,10)    face 1: top   (0,10)→(10,10)
+# face 2: right (10,10)→(10,0)  face 3: bottom (10,0)→(0,0)
+
+# ── 2. Cell properties ──
+cell_props = mp3du.hydrate_cell_properties(
+    top=np.array([10.0]), bot=np.array([0.0]),
+    porosity=np.array([0.25]), retardation=np.array([1.0]),
+    hhk=np.array([1e-2]), vhk=np.array([1e-3]),
+    disp_long=np.zeros(1), disp_trans_h=np.zeros(1), disp_trans_v=np.zeros(1),
+)
+
+# ── 3. Face flows (mp3du convention: positive = INTO cell) ──
+# Physical setup: 1.0 m³/d enters left, 0.5 exits right, 0.5 exits top
+modflow_face_flow = np.array([
+    1.0,   # face 0 (left):    +1.0 = in
+   -0.5,   # face 1 (top):     -0.5 = out
+   -0.5,   # face 2 (right):   -0.5 = out
+    0.0,   # face 3 (bottom):  no flow
+], dtype=np.float64)
+
+face_offset  = np.array([0, 4], dtype=np.uint64)
+face_neighbor = np.array([-1, -1, -1, -1], dtype=np.int64)
+
+# ── 4. Cell flows ──
+cell_flows = mp3du.hydrate_cell_flows(
+    head=np.array([9.0]), water_table=np.array([10.0]),  # confined: wt = top
+    q_top=np.zeros(1), q_bot=np.zeros(1), q_vert=np.zeros(1),
+    q_well=np.zeros(1), q_other=np.zeros(1), q_storage=np.zeros(1),
+    has_well=np.zeros(1, dtype=bool),
+    face_offset=face_offset,
+    face_flow=modflow_face_flow,      # positive = INTO cell
+    face_neighbor=face_neighbor,
+)
+
+# ── 5. Waterloo inputs — same face_flow array (positive = INTO) ──
+waterloo_inputs = mp3du.hydrate_waterloo_inputs(
+    centers_xy=np.array([[5.0, 5.0]]),
+    radii=np.array([5.0]),
+    perimeters=np.array([40.0]),
+    areas=np.array([100.0]),
+    q_vert=np.zeros(1), q_well=np.zeros(1), q_other=np.zeros(1),
+    face_offset=face_offset,
+    face_vx1=np.array([0.0, 0.0, 10.0, 10.0]),    # start-x of each face
+    face_vy1=np.array([0.0, 10.0, 10.0, 0.0]),     # start-y
+    face_vx2=np.array([0.0, 10.0, 10.0, 0.0]),     # end-x
+    face_vy2=np.array([10.0, 10.0, 0.0, 0.0]),     # end-y
+    face_length=np.array([10.0, 10.0, 10.0, 10.0]),
+    face_flow=modflow_face_flow,                    # same array — positive = INTO
+    noflow_mask=np.zeros(4, dtype=bool),
+)
+
+# ── 6. Fit velocity field (low order for simple geometry) ──
+waterloo_cfg = mp3du.WaterlooConfig(order_of_approx=3, n_control_points=16)
+field = mp3du.fit_waterloo(waterloo_cfg, grid, waterloo_inputs, cell_props, cell_flows)
+
+# ── 7. Configure and run simulation ──
+config = mp3du.SimulationConfig.from_json(json.dumps({
+    "velocity_method": "Waterloo", "solver": "DormandPrince",
+    "direction": 1.0, "initial_dt": 0.5, "max_dt": 2.0,
+    "retardation_enabled": False,
+    "adaptive": {"tolerance": 1e-6, "safety": 0.9, "alpha": 0.2,
+                 "min_scale": 0.2, "max_scale": 5.0, "max_rejects": 10,
+                 "min_dt": 1e-10, "euler_dt": 0.1},
+    "dispersion": {"method": "None"},
+    "capture": {"max_time": 500.0, "max_steps": 1000,
+                "stagnation_velocity": 1e-12, "stagnation_limit": 10},
+}))
+
+# z=0.5 means LAYER MIDPOINT (local coordinate), NOT physical z=0.5 m
+particles = [mp3du.ParticleStart(id=0, x=0.1, y=5.0, z=0.5, cell_id=0, initial_dt=0.5)]
+results = mp3du.run_simulation(config, field, particles, parallel=False)
+
+print(f"Status: {results[0].final_status}")
+for rec in results[0].to_records()[:3]:
+    # rec['z'] is local [0,1] — convert to physical if needed:
+    z_phys = 0.0 + rec['z'] * (10.0 - 0.0)  # bot + z_local * (top - bot)
+    print(f"  x={rec['x']:.3f}  y={rec['y']:.3f}  z_local={rec['z']:.3f}  z_phys={z_phys:.3f}")
 ```
 
 ## Error Patterns

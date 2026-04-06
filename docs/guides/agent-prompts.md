@@ -121,9 +121,11 @@ These are the highest-value references to name explicitly in your prompt:
 > - Use `import mp3du` as the canonical import.
 > - Build the configuration via `mp3du.SimulationConfig.from_json(json.dumps(config_dict))` and call `config.validate()`.
 > - Construct `water_table` from layer type as follows: confined `0 -> top`, unconfined `1 -> head`, convertible `> 0 -> min(head, top)`.
-> - Pass raw MODFLOW `face_flow` to `hydrate_cell_flows()`.
-> - Pass negated `face_flow` to `hydrate_waterloo_inputs()`.
-> - Pass direct per-cell `q_well` arrays in raw MODFLOW sign to both hydration functions.
+> - Determine which MODFLOW version produced the flow data — the sign conventions differ:
+>   - MODFLOW-USG/MF6 (`FLOW-JA-FACE`): raw positive = INTO cell. Negate once: `face_flow = -flowja`. Pass the same `face_flow` to both `hydrate_cell_flows()` and `hydrate_waterloo_inputs()`.
+>   - MODFLOW-2005/NWT (after directional→per-face assembly): result is positive = OUT. Pass directly to both `hydrate_cell_flows()` and `hydrate_waterloo_inputs()`.
+> - Pass `z` as a local normalized coordinate [0, 1] in `ParticleStart`, NOT a physical elevation. `0.0` = cell bottom, `1.0` = cell top.
+> - Pass direct per-cell `q_well` arrays in raw MODFLOW sign to both hydration functions — never negate `q_well`.
 > - If you are starting from IFACE-tagged `bc_flow` records, keep `bc_flow` in raw MODFLOW sign and use the documented IFACE routing rules, or `route_iface_bc_flows()`, to build per-cell `q_well`, `q_other`, `q_top`, and `q_bot` contributions.
 > - Keep `q_vert` as cell-to-cell vertical flow only; do not add IFACE 5, 6, or 7 boundary contributions to `q_vert`.
 > - If boundary capture data exists, pass the `bc_*` arrays to `hydrate_cell_flows()` instead of using `has_well=True` as a workaround for non-well boundaries.
@@ -218,8 +220,9 @@ These are the highest-value references to name explicitly in your prompt:
 >
 > Specifically check for:
 > - incorrect `water_table` construction
-> - incorrect `face_flow` sign handling
+> - incorrect `face_flow` sign handling (wrong for the MODFLOW version being used — USG/MF6 vs MF2005/NWT have opposite raw signs)
 > - incorrect `q_well` handling
+> - `z` passed as physical elevation instead of local [0, 1] in `ParticleStart`
 > - accidental double counting or misuse of `q_vert`, `q_top`, or `q_bot`
 > - unsupported or wrong IFACE handling
 > - misuse of `has_well` for non-well boundaries
@@ -253,8 +256,9 @@ These are the highest-value references to name explicitly in your prompt:
 >
 > In your ranked list, explicitly consider:
 > - `water_table` too small in confined layers
-> - `face_flow` sign mismatch between `hydrate_cell_flows()` and `hydrate_waterloo_inputs()`
+> - `face_flow` sign wrong for the MODFLOW version — USG/MF6 raw positive=IN vs MF2005/NWT assembled positive=OUT require opposite handling
 > - `q_well` sign mismatch
+> - `z` passed as physical elevation instead of local [0, 1]
 > - IFACE 5, 6, or 7 flows being incorrectly included in `q_vert`
 > - missing or wrong `bc_*` arrays
 > - misuse of `has_well` or `is_domain_boundary`

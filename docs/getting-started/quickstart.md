@@ -77,7 +77,9 @@ cell_flows = mp3du.hydrate_cell_flows(
     q_storage=np.zeros(n_cells),
     has_well=np.zeros(n_cells, dtype=np.bool_),
     face_offset=face_offset,
-    face_flow=face_flow,                   # raw MODFLOW sign (positive = out of cell)
+    face_flow=face_flow,                   # mp3du convention: positive = into cell
+                                               # (for USG/MF6: pass raw FLOWJA directly;
+                                               #  for MF2005: negate assembled per-face values)
     face_neighbor=face_neighbor,
 )
 
@@ -98,7 +100,7 @@ waterloo_inputs = mp3du.hydrate_waterloo_inputs(
     face_vx2=np.array([], dtype=np.float64),
     face_vy2=np.array([], dtype=np.float64),
     face_length=np.array([], dtype=np.float64),
-    face_flow=-face_flow,                  # NEGATE: Waterloo convention = positive INTO cell
+    face_flow=face_flow,                   # same array — positive = INTO cell
     noflow_mask=np.zeros(0, dtype=np.bool_),
 )
 

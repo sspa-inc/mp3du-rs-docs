@@ -58,6 +58,14 @@ Convert once, then pass the SAME array to both.
 
 Never negate q_well. See llms-full.txt for the full conversion reference.
 
+## ⚠️ Critical Pitfall: Vertex Winding (CW REQUIRED)
+
+All cell polygons passed to `build_grid()` MUST be wound Clockwise (CW)
+when viewed from above. There is NO runtime validation — wrong
+winding silently inverts face normals and produces a 180° reversed
+velocity field. If your source uses CCW winding, reverse the vertex list
+and negate all face_flow values.
+
 ## ⚠️ Critical Pitfall: Z Coordinate is Local [0, 1]
 
 ParticleStart.z and trajectory output z are LOCAL normalized coordinates

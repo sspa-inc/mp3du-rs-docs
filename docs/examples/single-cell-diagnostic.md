@@ -31,6 +31,48 @@ near the top-right corner — exactly what the face-flow budget predicts
 ## Script
 
 ```python
+"""
+Single-Cell Diagnostic — visual sanity check for mp3du particle tracking.
+==========================================================================
+
+PURPOSE
+-------
+Creates one 10×10 rectangular cell with a known, balanced face-flow budget,
+fits a Waterloo velocity field, tracks a single particle, and plots
+everything together so you can confirm that:
+
+  1. Face-flow signs and directions are physically consistent.
+  2. The interpolated velocity field matches the prescribed flow budget.
+  3. The particle trajectory follows the expected streamline.
+
+CONVENTIONS DEMONSTRATED (see Units & Conventions reference)
+-------------------------------------------------------------
+  • Vertices wound clockwise (CW) — required by the Waterloo method.
+    (If your data uses CCW winding, negate all face_flow values.)
+  • Face index i corresponds to the edge from vertex[i] → vertex[(i+1) % n].
+  • z in ParticleStart is LOCAL [0, 1] (0 = cell bottom, 1 = cell top),
+    NOT a physical elevation.
+  • face_flow sign convention: positive = INTO the cell.
+    The same array is passed to both hydrate_cell_flows() and
+    hydrate_waterloo_inputs().
+  • q_well is passed in raw MODFLOW sign to BOTH functions — never negate it.
+
+FLOW BUDGET
+-----------
+  Left face  : 1.0 m³/d IN     (the only inflow)
+  Right face : 0.5 m³/d OUT
+  Top face   : 0.5 m³/d OUT
+  Bottom face: 0.0 (no-flow)
+  ΣQ_in = 1.0,  ΣQ_out = 0.5 + 0.5 = 1.0  ✓ balanced
+  In positive=INTO convention: inflow is +, outflow is −.
+
+EXPECTED RESULT
+---------------
+  Particle starts near the left face, tracks right and upward (following the
+  50/50 split), and exits the domain near the top-right corner.
+  Final status: ExitedDomain.
+"""
+
 import json
 from pathlib import Path
 

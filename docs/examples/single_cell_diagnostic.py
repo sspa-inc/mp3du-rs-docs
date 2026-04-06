@@ -78,7 +78,7 @@ ORDER_OF_APPROX = 3
 N_CONTROL_POINTS = 16
 
 # Output path — SVG is vector, scales perfectly in docs
-OUTPUT_PATH = Path(__file__).with_name("single_cell_diagnostic.svg")
+OUTPUT_PATH = Path(__file__).parent.parent / "assets" / "images" / "single_cell_diagnostic.svg"
 
 
 # ╔══════════════════════════════════════════════════════════════════════╗
@@ -391,4 +391,4 @@ ax.legend(loc="lower right", fontsize=10, framealpha=1.0, edgecolor="#d1d8e0", b
 
 fig.tight_layout()
 fig.savefig(OUTPUT_PATH, bbox_inches="tight", dpi=300)
-print(f"Saved → {OUTPUT_PATH}")
+print(f"Saved -> {OUTPUT_PATH}")

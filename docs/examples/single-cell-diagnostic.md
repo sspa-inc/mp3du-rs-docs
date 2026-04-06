@@ -20,8 +20,8 @@ before attempting a full model integration.
 |------|-------|
 | **Status** | `ExitedDomain` |
 | **Steps** | 174 |
-| **Start** | (0.1, 5.0) |
-| **End** | (10.0, 9.95) |
+| **Start** | (0.1000, 5.0000) |
+| **End** | (9.9998, 9.9498) |
 
 The particle enters through the left face (green arrow, Q = 1.0 m³/d IN),
 flows right and upward following the velocity field, and exits the domain
@@ -183,7 +183,7 @@ if records:
     print(f"End    : ({records[-1]['x']:.4f}, {records[-1]['y']:.4f})")
 ```
 
-The plotting section (Step 9–10) samples the velocity field on a 20 × 20 grid,
+The plotting section (Step 9–10) samples the velocity field on a 30 × 30 grid,
 approximates head contours via Darcy's law, and draws the trajectory.  See the
 [full script](single_cell_diagnostic.py) for the complete matplotlib code.
 
@@ -194,9 +194,9 @@ approximates head contours via Darcy's law, and draws the trajectory.  See the
 | **Black rectangle** | Cell boundary (10 × 10 m) |
 | **Labelled arrows** | Face flows — green = inflow, red = outflow, with magnitude |
 | **Blue contours** | Approximate head field derived from the fitted velocities |
-| **Grey quiver arrows** | Waterloo interpolated velocity field (unit vectors, 20 × 20) |
+| **Grey quiver arrows** | Waterloo interpolated velocity field (unit vectors, 30 × 30) |
 | **Orange line** | Particle trajectory (174 steps, Dormand–Prince adaptive solver) |
-| **Green / red dots** | Start (0.1, 5.0) and end (10.0, 9.95) positions |
+| **Green / red dots** | Start (0.1000, 5.0000) and end (9.9998, 9.9498) positions |
 
 ## Key Conventions Demonstrated
 

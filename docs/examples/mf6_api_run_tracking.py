@@ -1,38 +1,29 @@
 """
-Run the MODFLOW 6 API + mp3du workflow for the MF6 version of Example 1b.
+Run MODFLOW 6 API + mp3du-rs particle tracking for Example 1b.
 
-This script demonstrates how to couple mp3du-rs with a running MODFLOW 6 simulation
-using the modflowapi. It extracts geometry, heads, and flows directly from memory
-without reading binary output files.
+This script demonstrates the modern, all-API workflow for coupled groundwater
+flow and particle tracking—no binary file I/O required.
 
-Key Concepts for LLMs and Developers:
--------------------------------------
+Key Concepts:
+-------------
 1. **FLOW-JA-FACE Sign Convention**: MODFLOW 6 `FLOWJA` uses positive = INTO cell.
-   The mp3du-rs API also uses positive = INTO cell. Therefore, you pass the `FLOWJA`
-   array directly to both `hydrate_cell_flows` and `hydrate_waterloo_inputs` without
+   The mp3du-rs API also uses positive = INTO cell. Pass `FLOWJA` directly without
    any negation.
 
-2. **Extracting Boundary Flows via API**: When reading boundary condition flows (like CHD)
-   via the MF6 API, do NOT use the `RHS` array. The `RHS` array contains the right-hand
-   side of the matrix equation, not the actual computed flow rate. Instead, use the
-   `SIMVALS` array, which contains the computed flow rates for the boundary condition
-   after the time step is solved.
+2. **Extracting Boundary Flows via API**: Use `SIMVALS` (computed flow rates),
+   NOT `RHS` (matrix right-hand side) when reading CHD flows.
 
-3. **Domain Boundaries vs. IFACE Capture**: Do NOT mark cells as domain boundaries
-   (`is_domain_boundary_arr = True`) if particles need to start inside them or pass
-   through them. Particles entering a domain boundary cell are immediately terminated
-   with `CapturedAtModelEdge`. Instead, rely on IFACE-based capture (e.g., IFACE=2 for
-   lateral CHD flow) which allows particles to exist within the cell and only captures
-   them when they exit the appropriate face.
+3. **IFACE-Based Capture**: CHD cells use IFACE=2 for lateral boundary capture.
+   This allows particles to exist within CHD cells and only captures them when
+   they exit through the appropriate face.
 
 Workflow:
-1. Load the DISV geometry written by create_model.py.
-2. Initialize MODFLOW 6 through the shared-library API.
-3. Read heads, FLOW-JA-FACE, and package rates directly from MF6 memory.
-4. Build mp3du.hydrate_cell_flows() and mp3du.hydrate_waterloo_inputs().
-5. Fit the Waterloo velocity field with mp3du.fit_waterloo().
-6. Track particles with mp3du.run_simulation().
-7. Save trajectories.csv, capture_summary.csv, and particle_paths.png.
+1. Load the DISV geometry written by create_model.py
+2. Initialize MODFLOW 6 through the shared-library API
+3. Read heads, FLOW-JA-FACE, and package rates directly from MF6 memory
+4. Build mp3du flow structures and fit the Waterloo velocity field
+5. Track particles with mp3du.run_simulation()
+6. Save trajectories.csv, capture_summary.csv, and particle_paths.png
 """
 
 from __future__ import annotations
@@ -47,9 +38,9 @@ import matplotlib.pyplot as plt
 import mp3du
 import numpy as np
 import shapefile
-from matplotlib.collections import LineCollection
+from matplotlib.collections import LineCollection, PatchCollection
 from matplotlib.patches import Patch, Polygon as MplPolygon
-from matplotlib.collections import PatchCollection
+from matplotlib.tri import LinearTriInterpolator, Triangulation
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 SIM_WS = SCRIPT_DIR / "sim"
@@ -60,6 +51,7 @@ CPP_PATHLINE_SHP = SCRIPT_DIR / "voronoi_v2_Pathline.shp"
 
 
 def find_libmf6():
+    """Locate the MODFLOW 6 shared library."""
     env = os.environ.get("LIBMF6_PATH")
     if env and Path(env).exists():
         return str(env)
@@ -70,11 +62,13 @@ def find_libmf6():
     if candidate_linux.exists():
         return str(candidate_linux)
     raise FileNotFoundError(
-        "Cannot find libmf6. Set LIBMF6_PATH or run `python -m flopy.utils.get_modflow <dir> --repo modflow6`."
+        "Cannot find libmf6. Set LIBMF6_PATH or run:\n"
+        "  python -m flopy.utils.get_modflow <dir> --repo modflow6"
     )
 
 
 def load_grid_data():
+    """Load grid metadata and cell polygons from JSON files."""
     with META_PATH.open() as f:
         meta = json.load(f)
     with POLY_PATH.open() as f:
@@ -85,6 +79,7 @@ def load_grid_data():
 
 
 def signed_area_xy(poly):
+    """Compute signed area of a polygon."""
     area = 0.0
     n = len(poly)
     for i in range(n):
@@ -95,6 +90,7 @@ def signed_area_xy(poly):
 
 
 def build_mp3du_grid(meta, cell_polygons_2d, centers_2d):
+    """Build mp3du grid structures from MF6 geometry."""
     cell_vertices_list = []
     cell_centers_list = []
     top = meta["layer_top"][0]
@@ -110,6 +106,7 @@ def build_mp3du_grid(meta, cell_polygons_2d, centers_2d):
 
 
 def build_cell_properties(meta):
+    """Build mp3du cell properties array."""
     n_cells = meta["ncpl"] * meta["nlay"]
     return mp3du.hydrate_cell_properties(
         top=np.full(n_cells, meta["layer_top"][0], dtype=float),
@@ -125,6 +122,7 @@ def build_cell_properties(meta):
 
 
 def precompute_geometry(meta, cell_polygons_2d):
+    """Precompute geometric quantities for flow extraction."""
     ncpl = meta["ncpl"]
     nlay = meta["nlay"]
     n_cells = ncpl * nlay
@@ -213,6 +211,7 @@ def precompute_geometry(meta, cell_polygons_2d):
 
 
 def precompute_flow_mappings(geo, ia, ja):
+    """Map MF6 FLOWJA indices to mp3du face indices."""
     n_cells = geo["n_cells"]
     nbr_to_japos = [None] * n_cells
     for ci in range(n_cells):
@@ -255,13 +254,13 @@ def extract_steady_flows(
     bc_type_names,
     is_domain_boundary_arr,
 ):
+    """Extract flows from MF6 and build mp3du flow structures."""
     n_cells = geo["n_cells"]
     face_flow_into_arr = np.zeros(len(geo["face_neighbor_arr"]), dtype=float)
     interior_mask = flow_map["hface_japos"] >= 0
 
     # MF6 FLOWJA positive = INTO owning cell. Keep the same positive-into-cell
-    # convention for both hydrate calls so face arrays stay aligned with the
-    # CW mp3du geometry contract.
+    # convention for both hydrate calls.
     face_flow_into_arr[flow_map["hface_idx"][interior_mask]] = flowja[flow_map["hface_japos"][interior_mask]]
 
     q_top_arr = np.zeros(n_cells, dtype=float)
@@ -310,6 +309,7 @@ def extract_steady_flows(
 
 
 def load_particles():
+    """Load particle starting locations from shapefile."""
     sf = shapefile.Reader(str(PARTICLE_SHP))
     particles = []
     for i, rec in enumerate(sf.iterShapeRecords()):
@@ -321,28 +321,9 @@ def load_particles():
     return particles
 
 
-def read_generated_chd_labels():
-    chd_path = SIM_WS / "gwf.chd"
-    labels = []
-    if not chd_path.exists():
-        return labels
-
-    with chd_path.open() as f:
-        for raw in f:
-            line = raw.strip()
-            if not line or line.startswith("#"):
-                continue
-            parts = line.split()
-            if len(parts) == 3 and parts[0].isdigit() and parts[1].isdigit():
-                layer_1based = int(parts[0])
-                cell_1based = int(parts[1])
-                head = float(parts[2])
-                labels.append((layer_1based - 1, cell_1based - 1, head))
-    return labels
-
-
-
-def save_outputs(results, meta, particles, cell_vertices_list, chd_cells, well_cells, head_arr):
+def save_outputs(results, meta, particles, cell_vertices_list, left_chd_cells, right_chd_cells, well_cells, head_arr):
+    """Save trajectory data and create visualization."""
+    # Save trajectories
     traj_path = SCRIPT_DIR / "trajectories.csv"
     with traj_path.open("w") as f:
         header_written = False
@@ -353,6 +334,7 @@ def save_outputs(results, meta, particles, cell_vertices_list, chd_cells, well_c
                     header_written = True
                 f.write(",".join([str(r.particle_id)] + [str(v) for v in rec.values()]) + "\n")
 
+    # Save capture summary
     capture_summary = []
     for r in results:
         records = r.to_records()
@@ -375,50 +357,116 @@ def save_outputs(results, meta, particles, cell_vertices_list, chd_cells, well_c
         for rec in capture_summary:
             f.write(",".join(str(rec[c]) for c in cols) + "\n")
 
-    fig, ax = plt.subplots(figsize=(14, 5))
+    # ── Modern, clean visualization ──────────────────────────────────────────
+    plt.rcParams.update({
+        "font.family": "sans-serif",
+        "axes.spines.top": False,
+        "axes.spines.right": False,
+    })
 
+    # Figure sized for 5:1 domain aspect ratio with breathing room
+    fig, ax = plt.subplots(figsize=(13, 4.5))
+    fig.patch.set_facecolor("#f8f8f8")
+    ax.set_facecolor("#f8f8f8")
+
+    # ── Head contours on a clipped regular grid (no edge artifacts) ──────────
     centers_xy = np.array([[c[0], c[1]] for c in meta["centers_xy"]], dtype=float)
-    contour_levels = np.linspace(float(np.min(head_arr)), float(np.max(head_arr)), 11)
-    tric = ax.tricontour(
-        centers_xy[:, 0],
-        centers_xy[:, 1],
-        head_arr,
-        levels=contour_levels,
-        colors="0.35",
-        linewidths=0.8,
-        zorder=0,
-    )
-    ax.clabel(tric, inline=True, fontsize=7, fmt="%.2f")
+    triang = Triangulation(centers_xy[:, 0], centers_xy[:, 1])
+    interp = LinearTriInterpolator(triang, head_arr)
 
+    # Regular grid strictly inside the domain
+    xi = np.linspace(0, 500, 400)
+    yi = np.linspace(0, 100, 160)
+    Xi, Yi = np.meshgrid(xi, yi)
+    Zi = interp(Xi, Yi)
+
+    n_levels = 10
+    contour_levels = np.linspace(float(np.nanmin(Zi)), float(np.nanmax(Zi)), n_levels + 1)
+    tric = ax.contour(
+        Xi, Yi, Zi,
+        levels=contour_levels,
+        colors="#4a6fa5",
+        linewidths=0.75,
+        alpha=0.7,
+        zorder=2,
+    )
+    # Sparse, non-overlapping contour labels
+    ax.clabel(
+        tric,
+        inline=True,
+        fontsize=6.5,
+        fmt="%.1f m",
+        inline_spacing=4,
+        use_clabeltext=True,
+    )
+
+    # ── Voronoi grid edges (very subtle) ─────────────────────────────────────
     grid_segments = []
     for verts in cell_vertices_list:
-        for j in range(len(verts)):
-            grid_segments.append([verts[j], verts[(j + 1) % len(verts)]])
-    grid_lc = LineCollection(grid_segments, linewidths=0.2, colors="0.80", zorder=1)
+        n = len(verts)
+        for j in range(n):
+            grid_segments.append([verts[j], verts[(j + 1) % n]])
+    grid_lc = LineCollection(
+        grid_segments, linewidths=0.15, colors="#cccccc", zorder=1
+    )
     ax.add_collection(grid_lc)
 
-    chd_patches = [MplPolygon(cell_vertices_list[ci], closed=True) for ci in sorted(chd_cells)]
-    if chd_patches:
-        pc_chd = PatchCollection(chd_patches, facecolor="cornflowerblue", edgecolor="none", alpha=0.5, zorder=2)
-        ax.add_collection(pc_chd)
+    # ── Boundary condition cells ──────────────────────────────────────────────
+    legend_handles = []
 
+    # ── Left CHD cells ────────────────────────────────────────────────────────
+    left_patches = [MplPolygon(cell_vertices_list[ci], closed=True) for ci in sorted(left_chd_cells)]
+    if left_patches:
+        pc_left = PatchCollection(
+            left_patches, facecolor="#5b9bd5", edgecolor="none", alpha=0.35, zorder=3
+        )
+        ax.add_collection(pc_left)
+        legend_handles.append(Patch(facecolor="#5b9bd5", alpha=0.5, label="Constant Head"))
+
+    # ── Right CHD cells ───────────────────────────────────────────────────────
+    right_patches = [MplPolygon(cell_vertices_list[ci], closed=True) for ci in sorted(right_chd_cells)]
+    if right_patches:
+        pc_right = PatchCollection(
+            right_patches, facecolor="#5b9bd5", edgecolor="none", alpha=0.35, zorder=3
+        )
+        ax.add_collection(pc_right)
+
+    # ── CHD head value annotations ────────────────────────────────────────────
+    left_head = float(meta.get("left_chd_head", 50.0))
+    right_head = float(meta.get("right_chd_head", 45.0))
+    if left_chd_cells:
+        verts = np.array(cell_vertices_list[sorted(left_chd_cells)[len(left_chd_cells) // 2]], dtype=float)
+        cx, cy = float(np.mean(verts[:, 0])), float(np.mean(verts[:, 1]))
+        ax.text(cx + 3, cy - 10, f"Left CHD = {left_head:.1f} m",
+                color="navy", fontsize=7.5, fontweight="bold", zorder=7,
+                bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="none", alpha=0.7))
+    if right_chd_cells:
+        verts = np.array(cell_vertices_list[sorted(right_chd_cells)[len(right_chd_cells) // 2]], dtype=float)
+        cx, cy = float(np.mean(verts[:, 0])), float(np.mean(verts[:, 1]))
+        ax.text(cx - 45, cy - 10, f"Right CHD = {right_head:.1f} m",
+                color="navy", fontsize=7.5, fontweight="bold", zorder=7,
+                bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="none", alpha=0.7))
+
+    # ── Well cells ────────────────────────────────────────────────────────────
     well_patches = [MplPolygon(cell_vertices_list[ci], closed=True) for ci in sorted(well_cells)]
     if well_patches:
-        pc_well = PatchCollection(well_patches, facecolor="red", edgecolor="none", alpha=0.5, zorder=2)
+        pc_well = PatchCollection(
+            well_patches, facecolor="#e05c5c", edgecolor="none", alpha=0.55, zorder=3
+        )
         ax.add_collection(pc_well)
+        legend_handles.append(Patch(facecolor="#e05c5c", alpha=0.6, label="Well"))
 
-    legend_handles = []
-    if chd_patches:
-        legend_handles.append(Patch(facecolor="cornflowerblue", alpha=0.5, label="Constant Head"))
-    if well_patches:
-        legend_handles.append(Patch(facecolor="red", alpha=0.5, label="Well"))
-
+    # ── Particle start locations ──────────────────────────────────────────────
     start_xs = [p.x for p in particles]
     start_ys = [p.y for p in particles]
-    h_start = ax.scatter(start_xs, start_ys, s=60, facecolors="none", edgecolors="green", linewidths=1.5, zorder=5)
+    h_start = ax.scatter(
+        start_xs, start_ys,
+        s=22, facecolors="none", edgecolors="#2ca02c",
+        linewidths=1.2, zorder=6, label="Start locations",
+    )
     legend_handles.append(h_start)
-    legend_handles[-1].set_label("Start locations")
 
+    # ── mp3du-rs pathlines — per-particle, solid lines ────────────────────────
     colors = plt.cm.tab10.colors
     for i, r in enumerate(results):
         records = r.to_records()
@@ -426,9 +474,16 @@ def save_outputs(results, meta, particles, cell_vertices_list, chd_cells, well_c
             continue
         xs = [rec["x"] for rec in records]
         ys = [rec["y"] for rec in records]
-        h, = ax.plot(xs, ys, color=colors[i % len(colors)], linewidth=1.0, zorder=4, label=f"Rust P{r.particle_id}")
+        h, = ax.plot(
+            xs, ys,
+            color=colors[i % len(colors)],
+            linewidth=1.1, alpha=0.9,
+            zorder=5,
+            label=f"mp3du-rs P{r.particle_id}",
+        )
         legend_handles.append(h)
 
+    # ── C++ legacy pathlines for comparison — per-particle, dashed ───────────
     if CPP_PATHLINE_SHP.exists():
         cpp_sf = shapefile.Reader(str(CPP_PATHLINE_SHP))
         for i, sr in enumerate(cpp_sf.iterShapeRecords()):
@@ -436,41 +491,47 @@ def save_outputs(results, meta, particles, cell_vertices_list, chd_cells, well_c
             attrs = sr.record.as_dict()
             xs = [p[0] for p in pts]
             ys = [p[1] for p in pts]
-            h, = ax.plot(xs, ys, color=colors[i % len(colors)], linewidth=1.5, linestyle="--", zorder=3, label=f"C++ P{attrs['PID']}")
+            h, = ax.plot(
+                xs, ys,
+                color=colors[i % len(colors)],
+                linewidth=1.4, linestyle="--", alpha=0.6,
+                zorder=4,
+                label=f"C++ P{attrs.get('PID', i)}",
+            )
             legend_handles.append(h)
 
-    chd_labels = read_generated_chd_labels()
-    left_label_done = False
-    right_label_done = False
-    for _, cell_id, head in chd_labels:
-        if cell_id < 0 or cell_id >= len(cell_vertices_list):
-            continue
-        verts = np.array(cell_vertices_list[cell_id], dtype=float)
-        cx = float(np.mean(verts[:, 0]))
-        cy = float(np.mean(verts[:, 1]))
-        if abs(head - 50.0) < 1.0e-9 and not left_label_done:
-            ax.text(cx + 4.0, cy + 2.0, f"Left CHD = {head:.1f} m", color="navy", fontsize=8, weight="bold", zorder=6)
-            left_label_done = True
-        elif abs(head - 45.0) < 1.0e-9 and not right_label_done:
-            ax.text(cx - 42.0, cy + 2.0, f"Right CHD = {head:.1f} m", color="navy", fontsize=8, weight="bold", zorder=6)
-            right_label_done = True
-        if left_label_done and right_label_done:
-            break
-
-    ax.set_xlim(-5, 510)
-    ax.set_ylim(-5, 110)
+    # ── Axes, labels, legend ──────────────────────────────────────────────────
+    ax.set_xlim(0, 500)
+    ax.set_ylim(0, 100)
     ax.set_aspect("equal")
-    ax.set_xlabel("x (m)")
-    ax.set_ylabel("y (m)")
-    ax.set_title("Example 1b MF6 API — Rust vs C++ Particle Paths with Head Diagnostics")
-    ax.legend(handles=legend_handles, loc="upper left", fontsize=6, ncol=3, framealpha=0.9)
+    ax.set_xlabel("x (m)", fontsize=9, labelpad=4)
+    ax.set_ylabel("y (m)", fontsize=9, labelpad=4)
+    ax.set_title(
+        "Example 1b — MF6 API · mp3du-rs vs C++ Particle Paths (MF6 Head Contours)",
+        fontsize=10, fontweight="bold", pad=8,
+    )
+    ax.tick_params(labelsize=8)
 
-    fig.tight_layout()
-    fig.savefig(SCRIPT_DIR / "particle_paths.png", dpi=200)
-    print(f"Saved comparison plot to {SCRIPT_DIR / 'particle_paths.png'}")
+    leg = ax.legend(
+        handles=legend_handles,
+        loc="upper left",
+        fontsize=7,
+        ncol=3,
+        framealpha=0.88,
+        edgecolor="#cccccc",
+        borderpad=0.6,
+        labelspacing=0.35,
+        columnspacing=1.0,
+    )
+    leg.get_frame().set_linewidth(0.5)
+
+    fig.tight_layout(pad=0.8)
+    fig.savefig(SCRIPT_DIR / "particle_paths.svg", bbox_inches="tight")
+    print(f"Saved plot to {SCRIPT_DIR / 'particle_paths.svg'}")
 
 
 def main():
+    """Main workflow: MF6 API solve → mp3du tracking."""
     print(f"Running from {SCRIPT_DIR}")
     if not (SIM_WS / "mfsim.nam").exists():
         print("ERROR: Model not found. Run create_model.py first.")
@@ -486,19 +547,19 @@ def main():
     cell_vertices_list, cell_centers_list = build_mp3du_grid(meta, cell_polygons_2d, centers_2d)
     geo = precompute_geometry(meta, cell_polygons_2d)
 
-    print("Constructing ModflowApi...")
+    print("Initializing MF6 via API...")
     mf6 = ModflowApi(libmf6_path, working_directory=str(SIM_WS))
-    print("Initializing MF6...")
     mf6.initialize()
     try:
-        print("Reading IA/JA...")
+        print("Reading IA/JA connectivity...")
         ia = mf6.get_value("GWF/CON/IA").copy() - 1
         ja = mf6.get_value("GWF/CON/JA").copy() - 1
         flow_map = precompute_flow_mappings(geo, ia, ja)
 
-        print("Advancing MF6 one step...")
+        print("Solving flow (one time step)...")
         mf6.update()
-        print("Reading heads and FLOWJA...")
+        
+        print("Extracting heads and FLOWJA from memory...")
         head_arr = mf6.get_value("GWF/X").copy().astype(np.float64)
         flowja = mf6.get_value("GWF/FLOWJA").copy().astype(np.float64)
 
@@ -513,7 +574,7 @@ def main():
         bc_flow_list = []
         bc_type_id_list = []
 
-        print("Reading WEL package data...")
+        print("Reading WEL package data from API...")
         nbound_wel = int(mf6.get_value("GWF/WEL_0/NBOUND")[0])
         if nbound_wel > 0:
             nodelist = mf6.get_value("GWF/WEL_0/NODELIST").copy()
@@ -528,7 +589,7 @@ def main():
                 bc_flow_list.append(q)
                 bc_type_id_list.append(1)
 
-        print("Reading CHD package data...")
+        print("Reading CHD package data from API...")
         nbound_chd = int(mf6.get_value("GWF/CHD_0/NBOUND")[0])
         if nbound_chd > 0:
             nodelist = mf6.get_value("GWF/CHD_0/NODELIST").copy()
@@ -541,12 +602,6 @@ def main():
                 bc_iface_list.append(2)
                 bc_flow_list.append(q)
                 bc_type_id_list.append(0)
-
-        # Do not mark CHD cells as domain boundaries, otherwise particles
-        # starting in them will be immediately captured.
-        # for node in meta.get("chd_cells", []):
-        #     if 0 <= int(node) < n_cells and not has_well_arr[int(node)]:
-        #         is_domain_boundary_arr[int(node)] = True
 
         bc_cell_ids_arr = np.array(bc_cell_ids_list, dtype=np.int64)
         bc_iface_arr = np.array(bc_iface_list, dtype=np.int32)
@@ -571,8 +626,9 @@ def main():
             bc_type_names,
             is_domain_boundary_arr,
         )
+        
+        print("Fitting Waterloo velocity field...")
         waterloo_cfg = mp3du.WaterlooConfig(order_of_approx=35, n_control_points=122)
-        print("Fitting Waterloo field...")
         field = mp3du.fit_waterloo(waterloo_cfg, grid, waterloo_inputs, cell_props, cell_flows)
 
         config_dict = {
@@ -602,12 +658,20 @@ def main():
             "direction": 1.0,
         }
         config = mp3du.SimulationConfig.from_json(json.dumps(config_dict))
+        
         particles = load_particles()
         print(f"Running particle tracking for {len(particles)} particles...")
         results = mp3du.run_simulation(config, field, particles, parallel=True)
+        
         meta["centers_xy"] = centers_2d.tolist()
-        save_outputs(results, meta, particles, cell_vertices_list, set(meta["left_chd_cells"] + meta["right_chd_cells"]), {meta["well_cell_2d"]}, head_arr)
-        print("Tracking workflow completed.")
+        save_outputs(
+            results, meta, particles, cell_vertices_list,
+            meta["left_chd_cells"],
+            meta["right_chd_cells"],
+            {meta["well_cell_2d"]},
+            head_arr,
+        )
+        print("Tracking workflow completed successfully.")
     finally:
         print("Finalizing MF6...")
         mf6.finalize()

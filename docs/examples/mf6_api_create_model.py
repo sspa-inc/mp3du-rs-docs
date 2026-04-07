@@ -1,23 +1,20 @@
 """
-Create a MODFLOW 6 DISV version of Example 1b inside [Examples/Example1b/mf6_api](Examples/Example1b/mf6_api).
+Create a MODFLOW 6 DISV model for Example 1b (MF6 API version).
 
-This script reuses the original Voronoi geometry from [Examples/Example1b/mp3du.gsf](Examples/Example1b/mp3du.gsf)
-and rebuilds the MF6 model from the original Example 1b boundary-condition files:
+This script builds the MF6 model from the Voronoi geometry in mp3du.gsf,
+replicating the original Example 1b conceptual model:
 
-- [Examples/Example1b/Voronoi.CHD](../Voronoi.CHD)
-- [Examples/Example1b/Voronoi.WEL](../Voronoi.WEL)
-
-The goal is to preserve the original conceptual model exactly:
-- Voronoi DISV grid from the original GSF geometry
+- Voronoi DISV grid (~400 cells, single layer)
+- Domain: 500 m × 100 m × 50 m
 - Top = 50 m, bottom = 0 m
-- Constant-head boundaries from the original CHD package
-- One pumping well from the original WEL package (node 361, Q = -50)
+- Constant-head boundaries: Left = 50 m, Right = 45 m
+- One pumping well: Q = -50 m³/d (cell 361)
 - Uniform HK = 10 m/d, VKA = 1 m/d, porosity = 0.30
 
-Outputs written to the local [sim](Examples/Example1b/mf6_api/sim) folder:
-- [mfsim.nam](Examples/Example1b/mf6_api/sim/mfsim.nam) and MF6 input files
-- [grid_meta.json](Examples/Example1b/mf6_api/sim/grid_meta.json)
-- [cell_polygons.json](Examples/Example1b/mf6_api/sim/cell_polygons.json)
+Outputs written to the local sim/ folder:
+- mfsim.nam and MF6 input files
+- grid_meta.json (metadata for mp3du)
+- cell_polygons.json (cell geometry for mp3du)
 """
 
 from __future__ import annotations
@@ -31,17 +28,28 @@ import numpy as np
 SCRIPT_DIR = Path(__file__).resolve().parent
 SIM_WS = SCRIPT_DIR / "sim"
 GSF_PATH = SCRIPT_DIR / "mp3du.gsf"
-CHD_PATH = SCRIPT_DIR.parent / "Voronoi.CHD"
-WEL_PATH = SCRIPT_DIR.parent / "Voronoi.WEL"
 
+# Model parameters matching original Example 1b
 TOP = 50.0
 BOT = 0.0
 HK = 10.0
 VKA = 1.0
 POROSITY = 0.30
 
+# Boundary conditions from original Example 1b (Voronoi.CHD / Voronoi.WEL)
+LEFT_CHD_HEAD = 50.0
+RIGHT_CHD_HEAD = 45.0
+WELL_Q = -50.0
+WELL_CELL = 360  # 0-based (361 in 1-based)
+
+# Exact CHD cell IDs (0-based) from the original Voronoi.CHD file.
+# These must match the GSF cell ordering — do NOT use heuristic selection.
+LEFT_CHD_CELLS = [0, 1, 4, 5, 10, 16, 17, 18, 19, 20, 21, 28, 29, 30, 31, 32, 49]
+RIGHT_CHD_CELLS = [643, 660, 684, 707, 727, 744, 760, 773, 786, 797, 807, 816, 824, 831, 836, 840, 842]
+
 
 def signed_area_xy(vertices: list[tuple[float, float]]) -> float:
+    """Compute signed area of a polygon (positive = CCW, negative = CW)."""
     area = 0.0
     n = len(vertices)
     for i in range(n):
@@ -52,6 +60,7 @@ def signed_area_xy(vertices: list[tuple[float, float]]) -> float:
 
 
 def parse_gsf(path: Path):
+    """Parse a GSF (Grid Specification File) to extract vertices and cells."""
     with path.open() as f:
         lines = f.readlines()
 
@@ -93,6 +102,7 @@ def parse_gsf(path: Path):
 
 
 def build_disv_geometry(vertices_xy, cells):
+    """Convert GSF geometry to MF6 DISV format."""
     vertex_ids = sorted(vertices_xy)
     vid_to_zero = {vid: i for i, vid in enumerate(vertex_ids)}
     vertices = [(vid_to_zero[vid], xy[0], xy[1]) for vid, xy in sorted(vertices_xy.items())]
@@ -104,46 +114,23 @@ def build_disv_geometry(vertices_xy, cells):
         iverts = [vid_to_zero[vid] for vid in cell["vert_ids"]]
         cell2d.append((icell2d, cell["cx"], cell["cy"], len(iverts), *iverts))
         polygons.append([[float(x), float(y)] for x, y in cell["verts"]])
-        centers_xy.append([float(cell["cx"]), float(cell["cy"])] )
+        centers_xy.append([float(cell["cx"]), float(cell["cy"])])
     return vertices, cell2d, polygons, centers_xy
 
 
-def parse_chd(path: Path):
-    with path.open() as f:
-        lines = [line.strip() for line in f if line.strip() and not line.lstrip().startswith("#")]
-
-    maxbound, _ = map(int, lines[0].split()[:2])
-    _ = lines[1]  # stress-period header
-    records = []
-    for line in lines[2:2 + maxbound]:
-        node, shead, ehead = line.split()[:3]
-        records.append((int(node) - 1, float(shead), float(ehead)))
-    return records
-
-
-def parse_wel(path: Path):
-    with path.open() as f:
-        lines = [line.strip() for line in f if line.strip() and not line.lstrip().startswith("#")]
-
-    mxactw, _ = map(int, lines[0].split()[:2])
-    _ = lines[1]  # stress-period header
-    records = []
-    for line in lines[2:2 + mxactw]:
-        node, q = line.split()[:2]
-        records.append((int(node) - 1, float(q)))
-    return records
-
-
 def build_model():
+    """Build and write the MF6 DISV model."""
     SIM_WS.mkdir(exist_ok=True)
 
     vertices_xy, cells = parse_gsf(GSF_PATH)
     vertices, cell2d, polygons, centers_xy_list = build_disv_geometry(vertices_xy, cells)
     ncpl = len(cells)
 
-    chd_records = parse_chd(CHD_PATH)
-    wel_records = parse_wel(WEL_PATH)
+    # Use exact CHD cell IDs from the original Voronoi.CHD file
+    left_chd_cells = list(LEFT_CHD_CELLS)
+    right_chd_cells = list(RIGHT_CHD_CELLS)
 
+    # Create MF6 simulation
     sim = flopy.mf6.MFSimulation(
         sim_name="example1b_mf6",
         sim_ws=str(SIM_WS),
@@ -181,20 +168,23 @@ def build_model():
         save_specific_discharge=True,
     )
 
-    chd_spd = [((0, node0), shead) for node0, shead, _ in chd_records]
+    # CHD package - constant head boundaries
+    chd_spd = []
+    for node0 in left_chd_cells:
+        chd_spd.append(((0, node0), LEFT_CHD_HEAD))
+    for node0 in right_chd_cells:
+        chd_spd.append(((0, node0), RIGHT_CHD_HEAD))
     flopy.mf6.ModflowGwfchd(gwf, stress_period_data={0: chd_spd}, pname="CHD_0")
 
-    wel_spd = [((0, node0), q) for node0, q in wel_records]
+    # WEL package - pumping well
+    wel_spd = [((0, WELL_CELL), WELL_Q)]
     flopy.mf6.ModflowGwfwel(gwf, stress_period_data={0: wel_spd}, pname="WEL_0")
 
     flopy.mf6.ModflowGwfoc(gwf)
     sim.write_simulation()
 
-    left_chd_cells = [node0 for node0, shead, _ in chd_records if abs(shead - 50.0) < 1.0e-9]
-    right_chd_cells = [node0 for node0, shead, _ in chd_records if abs(shead - 45.0) < 1.0e-9]
-    well_cell = wel_records[0][0]
-    well_xy = [float(cells[well_cell]["cx"]), float(cells[well_cell]["cy"])]
-
+    # Write metadata for mp3du
+    well_xy = [float(cells[WELL_CELL]["cx"]), float(cells[WELL_CELL]["cy"])]
     meta = {
         "grid_type": "DISV",
         "nlay": 1,
@@ -204,12 +194,14 @@ def build_model():
         "hk": [HK],
         "vka": [VKA],
         "porosity": [POROSITY],
-        "well_q": wel_records[0][1],
-        "well_cell_2d": well_cell,
+        "well_q": WELL_Q,
+        "well_cell_2d": WELL_CELL,
         "well_xy": well_xy,
         "left_chd_cells": left_chd_cells,
         "right_chd_cells": right_chd_cells,
-        "chd_cells": [node0 for node0, _, _ in chd_records],
+        "chd_cells": left_chd_cells + right_chd_cells,
+        "left_chd_head": LEFT_CHD_HEAD,
+        "right_chd_head": RIGHT_CHD_HEAD,
     }
     with (SIM_WS / "grid_meta.json").open("w") as f:
         json.dump(meta, f, indent=2)
@@ -223,8 +215,9 @@ def build_model():
         json.dump(poly_data, f)
 
     print(f"Created MF6 DISV model with {ncpl} cells")
-    print(f"  CHD cells:       {len(chd_records)}")
-    print(f"  Well cell:       {well_cell} at ({well_xy[0]:.2f}, {well_xy[1]:.2f})")
+    print(f"  Left CHD cells:  {len(left_chd_cells)} (head = {LEFT_CHD_HEAD} m)")
+    print(f"  Right CHD cells: {len(right_chd_cells)} (head = {RIGHT_CHD_HEAD} m)")
+    print(f"  Well cell:       {WELL_CELL} at ({well_xy[0]:.2f}, {well_xy[1]:.2f}), Q = {WELL_Q} m³/d")
     print(f"  Simulation dir:  {SIM_WS}")
 
 

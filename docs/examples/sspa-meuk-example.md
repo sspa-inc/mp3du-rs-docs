@@ -30,7 +30,7 @@ This is a minimal "smoke test" or tutorial script. It runs one particle per rele
 
 ### Output
 
-![Simple Run Plot](../../assets/images/run_simple_plot.png)
+![Simple Run Plot](../assets/images/run_simple_plot.png)
 
 ### Code
 
@@ -44,7 +44,7 @@ This is a full validation script. It includes dispersion, runs Monte Carlo repea
 
 ### Output
 
-![Validation Head Plot](../../assets/images/run_mp3du_rs_head_plot.png)
+![Validation Head Plot](../assets/images/run_mp3du_rs_head_plot.png)
 
 ### Code
 

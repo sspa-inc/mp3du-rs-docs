@@ -134,7 +134,8 @@ nav:
     - Complete Config: examples/complete-config.md
     - Minimal Python Script: examples/minimal-python-script.md
     - Single-Cell Diagnostic: examples/single-cell-diagnostic.md
+    - MF6 API Integration: examples/mf6-api-integration.md
     - Batch Simulation: examples/batch-simulation.md
     - Boundary Capture: examples/boundary-capture.md
     - Invalid Configs: examples/invalid-configs.md
-    - IFACE Flow Routing: reference/iface-flow-routing.md  
+    - IFACE Flow Routing: reference/iface-flow-routing.md

@@ -12,5 +12,9 @@
 
 ::: mp3du.fit_waterloo
 
+::: mp3du.hydrate_sspa_inputs
+
+::: mp3du.fit_sspa
+
 ::: mp3du.run_simulation
 

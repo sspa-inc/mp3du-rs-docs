@@ -104,11 +104,13 @@ nav:
     - Dispersion Theory: concepts/dispersion-theory.md
     - Adaptive Stepping: concepts/adaptive-stepping.md
     - IFACE & Boundary Capture: concepts/iface-boundary-capture.md
+    - SSP&A Velocity Interpolation: concepts/sspa-velocity.md
   - Guides:
     - guides/index.md
     - Building Configs: guides/building-configs.md
     - Running Simulations: guides/running-simulations.md
     - Troubleshooting: guides/troubleshooting.md
+    - Tracking from Head Maps (SSP&A): guides/sspa-workflow.md
   - Reference:
     - reference/index.md
     - Schema Reference: reference/schema-reference.md
@@ -123,6 +125,9 @@ nav:
       - CellProperties: reference/python-api/CellProperties.md
       - CellFlows: reference/python-api/CellFlows.md
       - WaterlooInputs: reference/python-api/WaterlooInputs.md
+      - SspaConfig: reference/python-api/SspaConfig.md
+      - SspaInputs: reference/python-api/SspaInputs.md
+      - SSP&A Drift Schema: reference/python-api/sspa-drift-schema.md
       - Functions: reference/python-api/functions.md
     - Solver Methods: reference/solver-methods.md
     - Dispersion Methods: reference/dispersion-methods.md
@@ -137,5 +142,6 @@ nav:
     - MF6 API Integration: examples/mf6-api-integration.md
     - Batch Simulation: examples/batch-simulation.md
     - Boundary Capture: examples/boundary-capture.md
+    - SSP&A Water Level Tracking: examples/sspa-water-level.md
     - Invalid Configs: examples/invalid-configs.md
     - IFACE Flow Routing: reference/iface-flow-routing.md

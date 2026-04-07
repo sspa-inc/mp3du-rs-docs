@@ -16,134 +16,419 @@ import numpy as np
 import numpy.typing as npt
 
 
-def version() -> str: ...
+def version() -> str:
+    """Return the version string of the installed mp3du library."""
+    ...
 
 
 class WaterlooConfig:
+    """Configuration for the Waterloo polynomial velocity-field fitting method.
+
+    The Waterloo method fits a polynomial velocity field to the discrete
+    face-by-face flows from an unstructured MODFLOW grid by minimising a
+    least-squares system at a set of interior control points.
+
+    Args:
+        order_of_approx: Order of the polynomial approximation (total number
+            of basis functions). Higher values capture more spatial detail but
+            increase memory and solve time. Default is ``35``.
+        n_control_points: Number of control points distributed inside the
+            fitting domain. Must be ≥ ``order_of_approx``. Default is ``122``.
+    """
+
     def __init__(self, order_of_approx: int = 35, n_control_points: int = 122) -> None: ...
+
     @property
-    def order_of_approx(self) -> int: ...
+    def order_of_approx(self) -> int:
+        """Order of the polynomial approximation (number of basis functions)."""
+        ...
+
     @property
-    def n_control_points(self) -> int: ...
+    def n_control_points(self) -> int:
+        """Number of control points used in the polynomial least-squares fit."""
+        ...
 
 
 class SimulationConfig:
+    """Top-level simulation configuration object.
+
+    Typically constructed from a JSON string (or file) via
+    `SimulationConfig.from_json()`.  The JSON must conform to the
+    [Schema Reference](../../reference/schema-reference.md).
+    """
+
     @staticmethod
-    def from_json(json_str: str) -> "SimulationConfig": ...
-    def to_json(self) -> str: ...
-    def validate(self) -> None: ...
+    def from_json(json_str: str) -> "SimulationConfig":
+        """Deserialize a ``SimulationConfig`` from a JSON string.
+
+        Args:
+            json_str: A JSON string that conforms to the mp3du configuration schema.
+
+        Returns:
+            A validated ``SimulationConfig`` instance.
+
+        Raises:
+            SchemaError: If the JSON is malformed or fails schema validation.
+        """
+        ...
+
+    def to_json(self) -> str:
+        """Serialize this configuration to a JSON string.
+
+        Returns:
+            A compact JSON representation of the configuration.
+        """
+        ...
+
+    def validate(self) -> None:
+        """Validate the configuration against the schema.
+
+        Raises:
+            SchemaError: If any field value is out of range or inconsistent.
+        """
+        ...
 
 
 class ParticleStart:
-    """Starting position for a particle.
+    """Defines a single particle's starting position and initial tracking step.
 
-    CRITICAL — z is a LOCAL normalized coordinate in [0, 1], NOT a
-    physical elevation.  0.0 = cell bottom, 1.0 = cell top,
-    0.5 = layer midpoint.  If you pass a physical elevation
-    (e.g. 5.0 when top=10 and bot=0) the tracker will exit the
-    cell immediately with ExitedDomain.
-
-    To convert a physical elevation to local z:
-        z_local = (z_physical - bot) / (top - bot)
+    Attributes:
+        id: User-supplied integer identifier for this particle.
+        x: Starting X coordinate (model units, global).
+        y: Starting Y coordinate (model units, global).
+        z: Starting Z coordinate — **local normalized value in [0, 1]**.
+            ``0.0`` = cell bottom, ``1.0`` = cell top, ``0.5`` = layer
+            midpoint.  This is **NOT** a physical elevation.  To convert:
+            ``z_local = (z_physical - bot) / (top - bot)``.
+            Passing a physical elevation (e.g. ``z=5.0`` when ``top=10,
+            bot=0``) causes immediate ``ExitedDomain`` because ``5.0 > 1.0``.
+        cell_id: Zero-based index of the MODFLOW cell that contains the
+            particle's starting position.
+        initial_dt: Initial time-step size for the adaptive tracker (model
+            time units).  Set to a small positive value; the solver adjusts
+            automatically afterwards.
     """
+
     id: int
     x: float
     y: float
-    z: float  # LOCAL [0, 1]: 0 = cell bottom, 1 = cell top
+    z: float
     cell_id: int
     initial_dt: float
+
     def __init__(
         self,
         id: int,
         x: float,
         y: float,
-        z: float,  # LOCAL [0, 1]: 0 = cell bottom, 1 = cell top
+        z: float,
         cell_id: int,
         initial_dt: float,
     ) -> None: ...
 
 
 class TrajectoryResult:
-    """Result of tracking one particle.
+    """Contains the complete tracking trajectory for a single particle.
 
-    to_records() returns dicts with keys:
-        step, time, x, y, z, vx, vy, vz, cell_id, dt
-
-    CRITICAL — the output 'z' is also LOCAL [0, 1], not a physical
-    elevation.  To convert back to global elevation:
-        z_global = bot[cell_id] + z * (top[cell_id] - bot[cell_id])
+    Attributes:
+        particle_id: The ``id`` supplied in the corresponding
+            `ParticleStart`.
+        final_status: Short string tag for the terminal state, e.g.
+            ``"captured_well"``, ``"exited_domain"``, ``"max_steps"``.
+        termination_reason: Human-readable description of why tracking
+            stopped.
     """
+
     particle_id: int
     final_status: str
     termination_reason: str
-    def to_records(self) -> List[Dict[str, Any]]: ...
-    def __len__(self) -> int: ...
+
+    def to_records(self) -> List[Dict[str, Any]]:
+        """Convert the trajectory to a list of per-step record dicts.
+
+        Each record contains the keys ``t``, ``x``, ``y``, ``z``,
+        ``cell_id``, and ``dt``.  The list can be passed directly to
+        ``pandas.DataFrame(result.to_records())``.
+
+        Returns:
+            A list of dicts, one per recorded trajectory step.
+        """
+        ...
+
+    def __len__(self) -> int:
+        """Return the number of recorded trajectory steps."""
+        ...
 
 
 class GridHandle:
-    def is_loaded(self) -> bool: ...
-    def n_cells(self) -> int: ...
+    """Opaque handle to a compiled unstructured grid.
+
+    Produced by `build_grid()`.  The handle is *consumed* (invalidated) by
+    `fit_waterloo()` or `fit_sspa()` — it cannot be reused after fitting.
+    """
+
+    def is_loaded(self) -> bool:
+        """Return ``True`` if the grid data is still resident in memory.
+
+        Returns ``False`` after the handle has been consumed by a fitting call.
+        """
+        ...
+
+    def n_cells(self) -> int:
+        """Return the number of cells in the grid."""
+        ...
 
 
 class WaterlooFieldHandle:
-    def is_loaded(self) -> bool: ...
-    def method_name(self) -> str: ...
-    def n_cells(self) -> int: ...
+    """Opaque handle to a fitted velocity field.
+
+    Returned by both `fit_waterloo()` and `fit_sspa()`.  Pass this handle
+    to `run_simulation()` to perform particle tracking.
+    """
+
+    def is_loaded(self) -> bool:
+        """Return ``True`` if the fitted field data is resident in memory."""
+        ...
+
+    def method_name(self) -> str:
+        """Return the name of the fitting method used (e.g. ``"waterloo"`` or ``"sspa"``)."""
+        ...
+
+    def n_cells(self) -> int:
+        """Return the number of cells in the underlying grid."""
+        ...
+
+
+# Alias — fit_sspa() and fit_waterloo() both return the same handle type.
+VelocityFieldHandle = WaterlooFieldHandle
+
+
+class SspaConfig:
+    """Configuration for the SSP&A (kriging-based) velocity-field fitting method.
+
+    Args:
+        search_radius: Neighbourhood search radius used when selecting
+            conditioning data for each kriging estimate (model units).
+        krig_offset: Small offset added to the kriging variogram nugget to
+            improve numerical stability. Default is ``0.1``.
+    """
+
+    def __init__(self, search_radius: float, krig_offset: float = 0.1) -> None: ...
+
+    @property
+    def search_radius(self) -> float:
+        """Neighbourhood search radius for kriging (model units)."""
+        ...
+
+    @property
+    def krig_offset(self) -> float:
+        """Variogram nugget offset for numerical stability."""
+        ...
+
+
+class SspaInputs:
+    """Hydrated inputs for the SSP&A fitting method.
+
+    Produced by `hydrate_sspa_inputs()`.  Pass to `fit_sspa()`.
+    """
+
+    def n_cells(self) -> int:
+        """Return the number of cells represented in these inputs."""
+        ...
+
+
+def hydrate_sspa_inputs(
+    heads: npt.NDArray[np.float64],
+    porosity: npt.NDArray[np.float64],
+    well_mask: npt.NDArray[np.bool_],
+    hydraulic_conductivity: Optional[npt.NDArray[np.float64]] = None,
+    hhk: Optional[npt.NDArray[np.float64]] = None,
+) -> SspaInputs:
+    """Hydrate SSP&A fitting inputs from NumPy arrays.
+
+    Args:
+        heads: Simulated hydraulic heads, shape ``(n_cells,)``.
+        porosity: Effective porosity per cell, shape ``(n_cells,)``.
+        well_mask: Boolean array marking cells that contain a well,
+            shape ``(n_cells,)``.
+        hydraulic_conductivity: Horizontal hydraulic conductivity per cell,
+            shape ``(n_cells,)``.  Provide exactly one of
+            ``hydraulic_conductivity`` or ``hhk``.
+        hhk: Alias for ``hydraulic_conductivity`` (legacy shorthand).
+            Provide exactly one of ``hydraulic_conductivity`` or ``hhk``.
+
+    Returns:
+        An `SspaInputs` object ready to pass to `fit_sspa()`.
+    """
+    ...
+
+
+def fit_sspa(
+    config: SspaConfig,
+    grid: GridHandle,
+    inputs: SspaInputs,
+    drifts: List[Dict[str, Any]],
+) -> VelocityFieldHandle:
+    """Fit the SSP&A (kriging-based) velocity field.
+
+    Consumes the GridHandle (it will no longer be loaded after the call).
+    """
+    ...
 
 
 class CellProperties:
+    """Per-cell physical properties used during velocity-field fitting and tracking.
+
+    All arrays are indexed by zero-based cell ID.  Produced by
+    `hydrate_cell_properties()`.
+    """
+
     @property
-    def top(self) -> List[float]: ...
+    def top(self) -> List[float]:
+        """Top elevation of each cell (model units)."""
+        ...
+
     @property
-    def bot(self) -> List[float]: ...
+    def bot(self) -> List[float]:
+        """Bottom elevation of each cell (model units)."""
+        ...
+
     @property
-    def porosity(self) -> List[float]: ...
+    def porosity(self) -> List[float]:
+        """Effective porosity of each cell (dimensionless, 0–1)."""
+        ...
+
     @property
-    def retardation(self) -> List[float]: ...
+    def retardation(self) -> List[float]:
+        """Retardation factor of each cell (dimensionless, ≥ 1)."""
+        ...
+
     @property
-    def hhk(self) -> List[float]: ...
+    def hhk(self) -> List[float]:
+        """Horizontal hydraulic conductivity of each cell (L/T)."""
+        ...
+
     @property
-    def vhk(self) -> List[float]: ...
+    def vhk(self) -> List[float]:
+        """Vertical hydraulic conductivity of each cell (L/T)."""
+        ...
+
     @property
-    def disp_long(self) -> List[float]: ...
+    def disp_long(self) -> List[float]:
+        """Longitudinal dispersivity of each cell (L)."""
+        ...
+
     @property
-    def disp_trans_h(self) -> List[float]: ...
+    def disp_trans_h(self) -> List[float]:
+        """Horizontal transverse dispersivity of each cell (L)."""
+        ...
+
     @property
-    def disp_trans_v(self) -> List[float]: ...
-    def n_cells(self) -> int: ...
+    def disp_trans_v(self) -> List[float]:
+        """Vertical transverse dispersivity of each cell (L)."""
+        ...
+
+    def n_cells(self) -> int:
+        """Return the number of cells."""
+        ...
 
 
 class CellFlows:
+    """Per-cell flow data (heads, budgets, face flows) used during particle tracking.
+
+    All arrays are indexed by zero-based cell ID.  Produced by
+    `hydrate_cell_flows()`.
+
+    !!! note "Sign conventions"
+        Pass raw MODFLOW values — **do not negate**.
+        ``face_flow`` positive = into cell (MODFLOW-USG / MF6 convention).
+        ``q_well`` negative = extraction, positive = injection.
+    """
+
     @property
-    def head(self) -> List[float]: ...
+    def head(self) -> List[float]:
+        """Simulated hydraulic head in each cell (model units)."""
+        ...
+
     @property
-    def water_table(self) -> List[float]: ...
+    def water_table(self) -> List[float]:
+        """Water-table elevation in each cell (model units)."""
+        ...
+
     @property
-    def q_top(self) -> List[float]: ...
+    def q_top(self) -> List[float]:
+        """Volumetric flux entering through the cell top (L³/T, raw MODFLOW sign)."""
+        ...
+
     @property
-    def q_bot(self) -> List[float]: ...
+    def q_bot(self) -> List[float]:
+        """Volumetric flux entering through the cell bottom (L³/T, raw MODFLOW sign)."""
+        ...
+
     @property
-    def q_vert(self) -> List[float]: ...
+    def q_vert(self) -> List[float]:
+        """Net vertical flow term (L³/T, raw MODFLOW sign)."""
+        ...
+
     @property
-    def q_well(self) -> List[float]: ...
+    def q_well(self) -> List[float]:
+        """Well volumetric flux (L³/T). Negative = extraction, positive = injection."""
+        ...
+
     @property
-    def q_other(self) -> List[float]: ...
+    def q_other(self) -> List[float]:
+        """Sum of all other (non-well, non-face) boundary fluxes (L³/T)."""
+        ...
+
     @property
-    def q_storage(self) -> List[float]: ...
+    def q_storage(self) -> List[float]:
+        """Storage term (L³/T, positive = release from storage)."""
+        ...
+
     @property
-    def has_well(self) -> List[bool]: ...
+    def has_well(self) -> List[bool]:
+        """``True`` for each cell that contains an active well."""
+        ...
+
     @property
-    def face_offset(self) -> List[int]: ...
+    def face_offset(self) -> List[int]:
+        """Start index into ``face_flow`` / ``face_neighbor`` for each cell."""
+        ...
+
     @property
-    def face_flow(self) -> List[float]: ...
+    def face_flow(self) -> List[float]:
+        """Face-by-face volumetric fluxes (L³/T).  Positive = into cell."""
+        ...
+
     @property
-    def face_neighbor(self) -> List[Optional[int]]: ...
-    def n_cells(self) -> int: ...
+    def face_neighbor(self) -> List[Optional[int]]:
+        """Zero-based cell index of the neighbouring cell across each face,
+        or ``None`` for domain-boundary faces."""
+        ...
+
+    def n_cells(self) -> int:
+        """Return the number of cells."""
+        ...
 
 
 class WaterlooInputs:
-    def n_cells(self) -> int: ...
-    def __len__(self) -> int: ...
+    """Hydrated inputs for the Waterloo polynomial velocity-field fitting method.
+
+    Produced by `hydrate_waterloo_inputs()`.  Pass to `fit_waterloo()`.
+
+    !!! note "Sign convention"
+        ``face_flow`` here uses the same convention as ``CellFlows``
+        (positive = INTO cell).  Pass the **same** ``face_flow`` array
+        to both ``hydrate_cell_flows()`` and ``hydrate_waterloo_inputs()``.
+    """
+
+    def n_cells(self) -> int:
+        """Return the number of cells represented in these inputs."""
+        ...
+
+    def __len__(self) -> int:
+        """Return the number of cells (same as ``n_cells()``)."""
+        ...
 
 
 def hydrate_cell_properties(
@@ -156,7 +441,26 @@ def hydrate_cell_properties(
     disp_long: npt.NDArray[np.float64],
     disp_trans_h: npt.NDArray[np.float64],
     disp_trans_v: npt.NDArray[np.float64],
-) -> CellProperties: ...
+) -> CellProperties:
+    """Hydrate per-cell physical properties from NumPy arrays.
+
+    All arrays must have shape ``(n_cells,)`` and be in cell-ID order.
+
+    Args:
+        top: Top elevation of each cell (model units).
+        bot: Bottom elevation of each cell (model units).
+        porosity: Effective porosity (dimensionless, 0–1).
+        retardation: Retardation factor (dimensionless, ≥ 1).
+        hhk: Horizontal hydraulic conductivity (L/T).
+        vhk: Vertical hydraulic conductivity (L/T).
+        disp_long: Longitudinal dispersivity (L).
+        disp_trans_h: Horizontal transverse dispersivity (L).
+        disp_trans_v: Vertical transverse dispersivity (L).
+
+    Returns:
+        A `CellProperties` object ready for use in `fit_waterloo()`.
+    """
+    ...
 
 
 def hydrate_cell_flows(
@@ -184,21 +488,22 @@ def hydrate_cell_flows(
     """Hydrate cell flow data from NumPy arrays.
 
     mp3du API convention (target):
-      - face_flow: positive = INTO cell.
-      - q_well: negative = extraction, positive = injection (raw MODFLOW sign).
 
-    CRITICAL — the transformation depends on your MODFLOW version:
-      - MODFLOW-USG / MF6 (FLOW-JA-FACE): raw is positive = IN → pass directly.
-            face_flow = flowja
-      - MODFLOW-2005/NWT (FLOW RIGHT FACE etc.): after directional→per-face
-        assembly the result is positive = OUT → negate once.
-            face_flow = -assembled_face_flow
+    - ``face_flow``: positive = **into** cell.
+    - ``q_well``: negative = extraction, positive = injection (raw MODFLOW sign).
 
-    Pass the SAME face_flow array to both hydrate_cell_flows() and
-    hydrate_waterloo_inputs(). No per-function negation needed.
+    The transformation from raw MODFLOW output depends on version:
 
-    Never negate q_well.
-    See docs/reference/units-and-conventions.md for the full reference.
+    - **MODFLOW-USG / MF6** (``FLOW-JA-FACE``): raw is positive = IN.
+      **Pass directly**: ``face_flow = flowja``.
+    - **MODFLOW-2005 / NWT** (after directional→per-face assembly):
+      result is positive = OUT. **Negate**: ``face_flow = -assembled``.
+
+    Pass the **same** ``face_flow`` array to both ``hydrate_cell_flows()``
+    and ``hydrate_waterloo_inputs()``.  No per-function negation needed.
+
+    Never negate ``q_well``.
+    See ``docs/reference/units-and-conventions.md`` for the full reference.
     """
     ...
 
@@ -223,17 +528,16 @@ def hydrate_waterloo_inputs(
     """Hydrate Waterloo velocity-fitting inputs from NumPy arrays.
 
     mp3du API convention (target):
-      - face_flow: positive = INTO cell — same as hydrate_cell_flows().
-      - q_well: raw MODFLOW sign (negative = extraction). Do NOT negate.
 
-    Pass the SAME face_flow array used for hydrate_cell_flows().
+    - ``face_flow``: positive = **INTO** cell — same as ``hydrate_cell_flows()``.
+    - ``q_well``: raw MODFLOW sign (negative = extraction). **Do NOT negate.**
+
+    Pass the **same** ``face_flow`` array used for ``hydrate_cell_flows()``.
     No per-function negation or sign flip is needed.
 
-    The Waterloo method subtracts the analytic well singularity
-    during fitting and adds it back during evaluation; both must
-    use the same q_well sign.
-
-    See docs/reference/units-and-conventions.md for the full reference.
+    The Waterloo method subtracts the analytic well singularity during fitting
+    and adds it back during evaluation; both must use the same ``q_well`` sign.
+    See ``docs/reference/units-and-conventions.md`` for the full reference.
     """
     ...
 
@@ -242,26 +546,19 @@ def build_grid(
     vertices: List[List[Tuple[float, float]]],
     centers: List[Tuple[float, float, float]],
 ) -> GridHandle:
-    """Build the computational grid from cell polygons.
+    """Compile an unstructured polygon grid into a `GridHandle`.
 
-    CRITICAL — Vertex Winding Order:
-      Vertices for each cell MUST be ordered Clockwise (CW)
-      when viewed from above (looking down the -Z axis).  The code
-      does NOT validate winding; wrong winding silently flips face
-      normals and produces an inverted velocity field.
+    Args:
+        vertices: For each cell, an ordered list of ``(x, y)`` vertex
+            coordinates defining the cell polygon.
+        centers: For each cell, a ``(x, y, z)`` tuple giving the cell
+            centroid (x, y) and representative elevation (z).
 
-      Face indexing: face i is the edge from vertex[i] to
-      vertex[(i+1) % n_vertices].  This determines which
-      face_flow[i] and face_vx1/vy1/vx2/vy2[i] values correspond
-      to which edge.
-
-    Example — a 10×10 square cell (CW):
-        vertices = [[(0,0), (0,10), (10,10), (10,0)]]
-        # face 0: (0,0)→(0,10)   = left edge
-        # face 1: (0,10)→(10,10) = top edge
-        # face 2: (10,10)→(10,0) = right edge
-        # face 3: (10,0)→(0,0)   = bottom edge
-    (If your source uses CCW winding, reverse the vertex list and negate all face_flow values.)"""
+    Returns:
+        A `GridHandle` that can be passed to `fit_waterloo()` or
+        `fit_sspa()`.  The handle is consumed (invalidated) by the
+        fitting call.
+    """
     ...
 
 
@@ -287,7 +584,7 @@ def fit_waterloo(
 
 def run_simulation(
     config: SimulationConfig,
-    velocity_field: WaterlooFieldHandle,
+    velocity_field: VelocityFieldHandle,
     particles: List[ParticleStart],
     parallel: bool = True,
 ) -> List[TrajectoryResult]:
@@ -504,224 +801,65 @@ def run_simulation(
 
 ```
 
-## Critical Data-Loading Pitfalls
-
-### Water Table / Saturated Thickness (SILENT VELOCITY ERROR)
-
-The `water_table` array in `hydrate_cell_flows()` controls saturated thickness,
-which directly divides the Waterloo stream function to produce velocity:
-
-    vx = Re(dΩ) / sat_thick / porosity
-    sat_thick = water_table - bot
-
-The correct `water_table` depends on the MODFLOW **layer type** (LAYTYP):
-
-    LAYTYP == 0  (confined)     → water_table = top     → sat_thick = top - bot
-    LAYTYP == 1  (unconfined)   → water_table = head    → sat_thick = head - bot
-    LAYTYP  > 0  (convertible)  → water_table = min(head, top)
-
-**If you set water_table = head for a confined layer**, sat_thick is too small
-and velocities are silently 2×–17× too large. No runtime error is raised.
-
-Diagnostic: Compare `field.velocity_at(x, y, 0.5)` against expected Darcy
-velocity `(K * dh/dx) / porosity`. A constant multiplier mismatch indicates
-wrong water_table.
-
-C++ reference: cls_cell.cpp → `cell->wt = cell->top` for LAYTYP==0.
-
-Code pattern:
-```python
-laytyp = m.lpf.laytyp.array  # per-layer
-for ci in range(n_cells):
-    lt = int(laytyp[layer])
-    if lt == 0:    wt_arr[ci] = cell_top[ci]          # confined
-    elif lt == 1:  wt_arr[ci] = head_arr[ci]           # unconfined
-    else:          wt_arr[ci] = min(head_arr[ci], cell_top[ci])  # convertible
-```
-
-## Cell Geometry and Face Ordering Rules
-
-### Vertex Winding (CW REQUIRED)
-
-All cell polygons passed to `build_grid()` MUST be wound Clockwise (CW)
-when viewed from above.  There is NO runtime validation — wrong
-winding silently inverts face normals and produces a 180° reversed
-velocity field.
-
-Test: compute the signed area via the shoelace formula.  Negative = CW.
-If your source uses CCW winding, reverse the vertex list and negate all face_flow values.
-
-### Face-to-Vertex Mapping
-
-For a cell with N vertices [v0, v1, ..., v_{N-1}]:
-
-    face 0 = edge v0 → v1
-    face 1 = edge v1 → v2
-    ...
-    face N-1 = edge v_{N-1} → v0
-
-All face-level arrays (`face_flow`, `face_vx1/vy1/vx2/vy2`,
-`face_length`, `face_neighbor`, `noflow_mask`) MUST follow this
-indexing.  `face_vx1[i], face_vy1[i]` = start vertex of face i;
-`face_vx2[i], face_vy2[i]` = end vertex of face i.
-
-CRITICAL: if your source format provides per-face neighbour IDs or other
-face metadata tied to the original vertex order, those arrays are part of
-this same indexing contract. If you reverse or otherwise reorder the
-vertex list to enforce CW winding, you MUST reorder the corresponding
-face/neighbour arrays identically. Reversing only the vertices while
-iterating neighbour IDs in the original order misaligns `face_flow` with
-geometric edges and can produce a reversed velocity field even when the
-assembled flow signs are correct.
-
-### Face Segment Alignment
-
-The `face_vx1/vy1/vx2/vy2` arrays in `hydrate_waterloo_inputs()` MUST
-match the grid vertices exactly.  For cell polygons passed to
-`build_grid(vertices=[[v0, v1, v2, v3]])`, use:
+## SSP&A Minimal Workflow
 
 ```python
-face_vx1 = [v0.x, v1.x, v2.x, v3.x]
-face_vy1 = [v0.y, v1.y, v2.y, v3.y]
-face_vx2 = [v1.x, v2.x, v3.x, v0.x]
-face_vy2 = [v1.y, v2.y, v3.y, v0.y]
-```
+import json
+import numpy as np
+import mp3du
 
-### Flow Sign Summary (Quick Reference)
-
-mp3du uses a single face_flow convention for BOTH hydrate functions:
-**positive = INTO cell** (flow entering the cell through that face).
-This matches the MODFLOW-USG / MF6 FLOW-JA-FACE convention directly;
-MODFLOW-2005/NWT users must negate after assembly.
-
-IMPORTANT — Raw MODFLOW-2005/NWT stores directional inter-cell flows, not
-per-cell flows.  The raw convention is positive in the direction of
-increasing row or column number:
-    FLOW RIGHT FACE at (row,col): positive = flow from (row,col) → (row,col+1)
-    FLOW FRONT FACE at (row,col): positive = flow from (row,col) → (row+1,col)
-A single stored value is simultaneously an outflow for one cell and an
-inflow for the other.  You MUST assemble these into per-cell per-face
-flows (flipping the sign for reverse-direction neighbors) before passing
-to mp3du.  After assembly, the result is positive = OUT — negate once.
-
-Transformation depends on MODFLOW version:
-
-    ── MODFLOW-USG / MF6 (FLOW-JA-FACE / FLOWJA: raw positive = IN) ──
-    face_flow = flowja                   # pass directly — already positive = INTO
-
-    ── MODFLOW-2005 / NWT (after directional → per-face assembly) ──
-    # During assembly, for cell (r,c):
-    #   right neighbor: flow = +frf[r,c]       (same direction → OUT)
-    #   left neighbor:  flow = -frf[r,c-1]     (reverse direction → OUT)
-    #   front neighbor: flow = +fff[r,c]       (same direction → OUT)
-    #   back neighbor:  flow = -fff[r-1,c]     (reverse direction → OUT)
-    face_flow = -assembled               # negate once → positive = INTO
-
-    # Pass face_flow to BOTH hydrate_cell_flows() and
-    # hydrate_waterloo_inputs(). No per-function negation needed.
-
-Never negate q_well. Pass raw MODFLOW sign to BOTH functions.
-
-### WaterlooConfig Tuning
-
-The defaults (`order_of_approx=35`, `n_control_points=122`) are tuned for
-complex multi-cell unstructured meshes.  For simple geometries (e.g. a
-single rectangular cell) they cause numerical oscillations (Runge's
-phenomenon) that create spurious eddies.
-
-Guideline: `order_of_approx` ≤ (number of faces × 2) for simple cells.
-For a 4-sided cell, use `order_of_approx=3` to `5`.
-
-## Worked Example — Single Rectangular Cell
-
-This minimal example tracks one particle through a 10×10 cell with
-flow entering from the left and exiting through the right and top.
-
-```python
-import json, numpy as np, mp3du
-
-# ── 1. Grid (CW vertices) ──
-vertices = [[(0.0, 0.0), (0.0, 10.0), (10.0, 10.0), (10.0, 0.0)]]
-centers  = [(5.0, 5.0, 5.0)]
+# 1. Build grid (example: single square cell)
+vertices = [[(0,0), (100,0), (100,100), (0,100)]]
+centers = [(50.0, 50.0, 0.0)]
 grid = mp3du.build_grid(vertices, centers)
-# face 0: left  (0,0)→(0,10)    face 1: top   (0,10)→(10,10)
-# face 2: right (10,10)→(10,0)  face 3: bottom (10,0)→(0,0)
 
-# ── 2. Cell properties ──
-cell_props = mp3du.hydrate_cell_properties(
-    top=np.array([10.0]), bot=np.array([0.0]),
-    porosity=np.array([0.25]), retardation=np.array([1.0]),
-    hhk=np.array([1e-2]), vhk=np.array([1e-3]),
-    disp_long=np.zeros(1), disp_trans_h=np.zeros(1), disp_trans_v=np.zeros(1),
+# 2. Hydrate SSP&A inputs (all arrays shape (n_cells,))
+n = grid.n_cells()
+inputs = mp3du.hydrate_sspa_inputs(
+    heads=np.array([10.0]),
+    porosity=np.array([0.3]),
+    well_mask=np.array([True]),
+    hhk=np.array([100.0]),          # OR hydraulic_conductivity=
 )
 
-# ── 3. Face flows (mp3du convention: positive = INTO cell) ──
-# Physical setup: 1.0 m³/d enters left, 0.5 exits right, 0.5 exits top
-modflow_face_flow = np.array([
-    1.0,   # face 0 (left):    +1.0 = in
-   -0.5,   # face 1 (top):     -0.5 = out
-   -0.5,   # face 2 (right):   -0.5 = out
-    0.0,   # face 3 (bottom):  no flow
-], dtype=np.float64)
+# 3. Define drifts (list of dicts)
+drifts = [
+    {"type": "well", "event": "SS", "term": 1, "name": "W1",
+      "value": -500.0, "x": 50.0, "y": 50.0},
+]
 
-face_offset  = np.array([0, 4], dtype=np.uint64)
-face_neighbor = np.array([-1, -1, -1, -1], dtype=np.int64)
+# 4. Fit velocity field (consumes grid!)
+cfg = mp3du.SspaConfig(search_radius=300.0, krig_offset=0.1)
+field = mp3du.fit_sspa(cfg, grid, inputs, drifts)
+# grid is now invalid — do not reuse
 
-# ── 4. Cell flows ──
-cell_flows = mp3du.hydrate_cell_flows(
-    head=np.array([9.0]), water_table=np.array([10.0]),  # confined: wt = top
-    q_top=np.zeros(1), q_bot=np.zeros(1), q_vert=np.zeros(1),
-    q_well=np.zeros(1), q_other=np.zeros(1), q_storage=np.zeros(1),
-    has_well=np.zeros(1, dtype=bool),
-    face_offset=face_offset,
-    face_flow=modflow_face_flow,      # positive = INTO cell
-    face_neighbor=face_neighbor,
-)
-
-# ── 5. Waterloo inputs — same face_flow array (positive = INTO) ──
-waterloo_inputs = mp3du.hydrate_waterloo_inputs(
-    centers_xy=np.array([[5.0, 5.0]]),
-    radii=np.array([5.0]),
-    perimeters=np.array([40.0]),
-    areas=np.array([100.0]),
-    q_vert=np.zeros(1), q_well=np.zeros(1), q_other=np.zeros(1),
-    face_offset=face_offset,
-    face_vx1=np.array([0.0, 0.0, 10.0, 10.0]),    # start-x of each face
-    face_vy1=np.array([0.0, 10.0, 10.0, 0.0]),     # start-y
-    face_vx2=np.array([0.0, 10.0, 10.0, 0.0]),     # end-x
-    face_vy2=np.array([10.0, 10.0, 0.0, 0.0]),     # end-y
-    face_length=np.array([10.0, 10.0, 10.0, 10.0]),
-    face_flow=modflow_face_flow,                    # same array — positive = INTO
-    noflow_mask=np.zeros(4, dtype=bool),
-)
-
-# ── 6. Fit velocity field (low order for simple geometry) ──
-waterloo_cfg = mp3du.WaterlooConfig(order_of_approx=3, n_control_points=16)
-field = mp3du.fit_waterloo(waterloo_cfg, grid, waterloo_inputs, cell_props, cell_flows)
-
-# ── 7. Configure and run simulation ──
-config = mp3du.SimulationConfig.from_json(json.dumps({
-    "velocity_method": "Waterloo", "solver": "DormandPrince",
-    "direction": 1.0, "initial_dt": 0.5, "max_dt": 2.0,
-    "retardation_enabled": False,
-    "adaptive": {"tolerance": 1e-6, "safety": 0.9, "alpha": 0.2,
-                 "min_scale": 0.2, "max_scale": 5.0, "max_rejects": 10,
-                 "min_dt": 1e-10, "euler_dt": 0.1},
-    "dispersion": {"method": "None"},
-    "capture": {"max_time": 500.0, "max_steps": 1000,
-                "stagnation_velocity": 1e-12, "stagnation_limit": 10},
+# 5. Run simulation
+sim_cfg = mp3du.SimulationConfig.from_json(json.dumps({
+    "velocity_method": "Waterloo",
+    "solver": "DormandPrince",
+    "adaptive": {"tolerance": 1e-6},
+    "capture": {"max_time": 1000.0, "max_steps": 100000},
+    "initial_dt": 0.1,
+    "direction": 1.0,
 }))
-
-# z=0.5 means LAYER MIDPOINT (local coordinate), NOT physical z=0.5 m
-particles = [mp3du.ParticleStart(id=0, x=0.1, y=5.0, z=0.5, cell_id=0, initial_dt=0.5)]
-results = mp3du.run_simulation(config, field, particles, parallel=False)
-
-print(f"Status: {results[0].final_status}")
-for rec in results[0].to_records()[:3]:
-    # rec['z'] is local [0,1] — convert to physical if needed:
-    z_phys = 0.0 + rec['z'] * (10.0 - 0.0)  # bot + z_local * (top - bot)
-    print(f"  x={rec['x']:.3f}  y={rec['y']:.3f}  z_local={rec['z']:.3f}  z_phys={z_phys:.3f}")
+particles = [mp3du.ParticleStart(id=0, x=25.0, y=25.0, z=0.5, cell_id=0, initial_dt=0.1)]
+results = mp3du.run_simulation(sim_cfg, field, particles)
+for r in results:
+    print(r.final_status, len(r.to_records()), "steps")
 ```
+
+## SSP&A Drift Type Reference
+
+Supported drift types for fit_sspa() drifts parameter:
+
+| Type | Aliases | Required Keys | Capture |
+|------|---------|--------------|---------|
+| well | — | type, event, term, name, value, x, y | ✅ Implemented |
+| linesink | line_sink, line-sink | type, event, term, name, value, x1, y1, x2, y2 | ❌ Deferred |
+| noflow | no_flow, no-flow | type, event, term, name, value, x1, y1, x2, y2 | ❌ Deferred |
+
+Line segments with the same (type, event, term, name) are grouped into one drift.
+Mixed values within a group are rejected. Zero-length segments are rejected.
 
 ## Error Patterns
 

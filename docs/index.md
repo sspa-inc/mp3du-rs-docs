@@ -2,7 +2,7 @@
 
 **3D particle tracking engine for groundwater flow models.**
 
-mod-PATH3DU is a modernized particle tracking engine built in Rust with Python bindings via PyO3. It supports unstructured grids (MODFLOW-USG), adaptive Runge-Kutta integration, the Waterloo method for velocity interpolation, and stochastic dispersion (GSDE and Ito formulations).
+mod-PATH3DU is a modernized particle tracking engine built in Rust with Python bindings via PyO3. It supports unstructured grids (MODFLOW-USG), adaptive Runge-Kutta integration, the Waterloo method and SSP&A (Papadopulos) method for velocity interpolation, and stochastic dispersion (GSDE and Ito formulations).
 
 ## Quick Links
 
@@ -11,6 +11,7 @@ mod-PATH3DU is a modernized particle tracking engine built in Rust with Python b
 - [Schema Reference](reference/schema-reference.md) — Full configuration contract
 - [Python API](reference/python-api/index.md) — Type signatures and class reference
 - [Examples](examples/index.md) — Validated, copy-paste-ready examples
+- [SSP&A Workflow](guides/sspa-workflow.md) — Particle tracking from head maps
 
 ## For AI Agents
 

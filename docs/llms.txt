@@ -17,6 +17,20 @@
 - WaterlooFieldHandle: fitted velocity field
 - CellProperties: per-cell physical properties
 - CellFlows: per-cell flow budget arrays
+- SspaConfig: SSP&A (kriging-based) velocity fitting configuration
+- SspaInputs: hydrated SSP&A inputs (heads, porosity, conductivity, well mask)
+- VelocityFieldHandle: alias for WaterlooFieldHandle (returned by both fit methods)
+
+## Key Functions
+
+- hydrate_sspa_inputs(): build SspaInputs from NumPy arrays
+- fit_sspa(): fit SSP&A velocity field (consumes GridHandle)
+- hydrate_cell_properties(): build CellProperties from NumPy arrays
+- hydrate_cell_flows(): build CellFlows from NumPy arrays
+- hydrate_waterloo_inputs(): build WaterlooInputs from NumPy arrays
+- build_grid(): build GridHandle from vertices and centers
+- fit_waterloo(): fit Waterloo velocity field (consumes GridHandle)
+- run_simulation(): run particle tracking on a fitted field
 
 ## Links
 
@@ -83,3 +97,48 @@ immediate ExitedDomain.
 
     z_local = (z_physical - bot) / (top - bot)
     z_physical = bot + z_local * (top - bot)
+
+## ⚠️ Critical Pitfall: SSP&A Conductivity Argument Exclusivity
+
+hydrate_sspa_inputs() accepts exactly one of `hydraulic_conductivity=` or `hhk=`.
+Passing both raises ValueError. Omitting both raises ValueError.
+`hhk` is the legacy/domain shorthand for horizontal hydraulic conductivity.
+
+## ⚠️ Critical Pitfall: SSP&A Array Shapes
+
+All arrays passed to hydrate_sspa_inputs() must have shape (n_cells,):
+  heads, porosity, well_mask, and conductivity (hhk or hydraulic_conductivity).
+Mismatched lengths raise ValueError at hydrate time or fit time.
+
+## ⚠️ Critical Pitfall: well_mask Is Cell-Based
+
+well_mask is a boolean array of length n_cells (one entry per grid cell),
+NOT a list of well indices or a list matching len(drifts).
+Set True for cells that contain a well. The mask is used to exclude
+well cells from kriging conditioning data.
+
+## ⚠️ Critical Pitfall: fit_sspa() Consumes the GridHandle
+
+After calling fit_sspa(), the GridHandle is invalidated and cannot be
+reused. If you need the grid for multiple fits, rebuild it.
+
+## ⚠️ Critical Pitfall: SSP&A Supported Drift Types
+
+Only three drift types are supported: well, linesink, noflow.
+Do not invent other type values. Unsupported types raise ValueError.
+  - well: requires x, y
+  - linesink: requires x1, y1, x2, y2
+  - noflow: requires x1, y1, x2, y2
+All drifts require: type, event, term, name, value.
+
+## ⚠️ Critical Pitfall: SSP&A Performance
+
+fit_sspa() neighborhood precomputation is currently O(n²) in cell count.
+For a 201×201 grid (40,401 cells), fitting takes ~350 seconds.
+Plan accordingly for large grids.
+
+## ⚠️ Critical Pitfall: SSP&A Line/NoFlow Capture Not Yet Implemented
+
+Runtime capture (particle interception) is implemented for well drifts only.
+Line-sink and no-flow drifts affect the velocity field but do NOT capture
+particles at runtime. This is a known limitation.

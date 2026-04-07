@@ -231,7 +231,8 @@ def hydrate_sspa_inputs(
     heads: npt.NDArray[np.float64],
     porosity: npt.NDArray[np.float64],
     well_mask: npt.NDArray[np.bool_],
-    hhk: npt.NDArray[np.float64],
+    hydraulic_conductivity: Optional[npt.NDArray[np.float64]] = None,
+    hhk: Optional[npt.NDArray[np.float64]] = None,
 ) -> SspaInputs:
     """Hydrate SSP&A fitting inputs from NumPy arrays.
 
@@ -240,7 +241,11 @@ def hydrate_sspa_inputs(
         porosity: Effective porosity per cell, shape ``(n_cells,)``.
         well_mask: Boolean array marking cells that contain a well,
             shape ``(n_cells,)``.
-        hhk: Horizontal hydraulic conductivity per cell, shape ``(n_cells,)``.
+        hydraulic_conductivity: Horizontal hydraulic conductivity per cell,
+            shape ``(n_cells,)``.  Provide exactly one of
+            ``hydraulic_conductivity`` or ``hhk``.
+        hhk: Alias for ``hydraulic_conductivity`` (legacy shorthand).
+            Provide exactly one of ``hydraulic_conductivity`` or ``hhk``.
 
     Returns:
         An `SspaInputs` object ready to pass to `fit_sspa()`.

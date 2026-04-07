@@ -150,10 +150,11 @@ for res in results:
 **Warning:** The `fit_sspa()` function uses kriging, which has an O(n²) computational cost (where n is the number of cells). For a 201×201 grid (40,401 cells), fitting takes approximately 350 seconds. Plan accordingly for large regional models.
 
 ## Full Validation Script
-For a complete, runnable script that includes file I/O, dispersion, and result plotting, see `Examples/Example5a/02-MEUK_Equivalent/run_mp3du_rs.py` in the mod-PATH3DU repository. The simpler `run_simple.py` in the same directory provides a minimal version without dispersion.
+For a complete, runnable script that includes file I/O, dispersion, and result plotting, see the [MEUK Example (SSP&A)](sspa-meuk-example.md) example.
 
 ## See Also
 - [Tracking from Head Maps (SSP&A Workflow)](../guides/sspa-workflow.md)
 - [SSP&A Velocity Interpolation](../concepts/sspa-velocity.md)
 - [SSP&A Drift Schema](../reference/python-api/sspa-drift-schema.md)
 - [SSP&A API Reference](../reference/python-api/index.md)
+

@@ -143,5 +143,6 @@ nav:
     - Batch Simulation: examples/batch-simulation.md
     - Boundary Capture: examples/boundary-capture.md
     - SSP&A Water Level Tracking: examples/sspa-water-level.md
+    - MEUK Example (SSP&A): examples/sspa-meuk-example.md
     - Invalid Configs: examples/invalid-configs.md
     - IFACE Flow Routing: reference/iface-flow-routing.md

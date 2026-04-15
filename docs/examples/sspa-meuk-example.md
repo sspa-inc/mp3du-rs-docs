@@ -30,7 +30,9 @@ This is a minimal "smoke test" or tutorial script. It runs one particle per rele
 
 ### Output
 
-![Simple Run Plot](../assets/images/meuk_tutorial_smoke_test_plot.png)
+The tutorial script writes `meuk_tutorial_smoke_test_plot.png` to the working
+example directory when run locally. The image is not bundled into the published
+docs site because it is generated from external Example 5a input files.
 
 ### Code
 
@@ -44,7 +46,10 @@ This is a full validation script. It includes dispersion, runs Monte Carlo repea
 
 ### Output
 
-![Validation Head Plot](../assets/images/meuk_validation_workflow_head_plot.png)
+The validation script writes `meuk_validation_workflow_head_plot.png` to the
+working example directory when run locally. The image is not bundled into the
+published docs site because it is generated from external Example 5a input files
+and legacy reference shapefiles.
 
 ### Code
 

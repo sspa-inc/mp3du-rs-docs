@@ -3,6 +3,32 @@
 > 3D particle tracking engine for groundwater flow models.
 > Rust core with Python bindings via PyO3.
 
+## Two Entry Paths — Choose by Data Source
+
+mp3du supports two velocity-fitting methods. Choose based on what you have:
+
+| You have… | Use this path | Key functions |
+|-----------|--------------|---------------|
+| **MODFLOW model** with cell-by-cell flow budgets (FLOW-JA-FACE, CBC) | **Waterloo** polynomial fit | `hydrate_cell_flows()`, `hydrate_waterloo_inputs()`, `fit_waterloo()` |
+| **Water-level surface** (raster, interpolated heads, MEUK output, or any gridded head + conductivity data) on a custom grid — no MODFLOW flow budgets needed | **SSP&A** kriging-based fit | `hydrate_sspa_inputs()`, `fit_sspa()` |
+
+Both paths share `build_grid()`, `run_simulation()`, `SimulationConfig`, and `ParticleStart`.
+Both produce a `VelocityFieldHandle` that is passed to `run_simulation()`.
+
+**If you have a water-level raster (e.g. from MEUK), start with the SSP&A path:**
+1. Define or load a grid → `build_grid()`
+2. Sample heads, porosity, and conductivity onto grid cells → `hydrate_sspa_inputs()`
+3. Define drifts (wells, line sinks, no-flow boundaries) → list of dicts
+4. Fit → `fit_sspa()`
+5. Track → `run_simulation()`
+
+**If you have a completed MODFLOW model, start with the Waterloo path:**
+1. Load model and extract arrays (e.g. via `flopy`)
+2. Build grid → `build_grid()`
+3. Hydrate properties and flows → `hydrate_cell_properties()`, `hydrate_cell_flows()`, `hydrate_waterloo_inputs()`
+4. Fit → `fit_waterloo()`
+5. Track → `run_simulation()`
+
 ## Import
 
     import mp3du  # canonical import

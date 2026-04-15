@@ -1,5 +1,40 @@
 # mod-PATH3DU — Full Machine-Readable Reference
 
+## Two Entry Paths — Choose by Data Source
+
+mp3du is NOT limited to MODFLOW models. It supports two velocity-fitting
+methods. Choose based on what upstream data you have:
+
+| You have… | Use this path | Key functions |
+|-----------|--------------|---------------|
+| **MODFLOW model** with cell-by-cell flow budgets (FLOW-JA-FACE, CBC) | **Waterloo** polynomial fit | `hydrate_cell_properties()`, `hydrate_cell_flows()`, `hydrate_waterloo_inputs()`, `fit_waterloo()` |
+| **Water-level surface** (raster, interpolated heads, MEUK output, or any gridded head + conductivity data) on a custom grid — no MODFLOW flow budgets needed | **SSP&A** kriging-based fit | `hydrate_sspa_inputs()`, `fit_sspa()` |
+
+Both paths share: `build_grid()`, `run_simulation()`, `SimulationConfig`,
+`ParticleStart`, and `VelocityFieldHandle`.
+
+### If you have a water-level raster (e.g. MEUK), start here:
+
+1. Define or load a polygon grid → `build_grid(vertices, centers)`
+2. Sample heads, porosity, and conductivity onto grid cells
+3. Hydrate → `hydrate_sspa_inputs(heads, porosity, well_mask, hhk=...)`
+4. Define drifts (wells, line sinks, no-flow boundaries) as a list of dicts
+5. Fit → `fit_sspa(config, grid, inputs, drifts)` → `VelocityFieldHandle`
+6. Track → `run_simulation(sim_config, field, particles)`
+
+See the "SSP&A Minimal Workflow" section below for a complete code example.
+
+### If you have a completed MODFLOW model, start here:
+
+1. Load model and extract arrays (e.g. via `flopy`)
+2. Build grid → `build_grid(vertices, centers)`
+3. Hydrate properties → `hydrate_cell_properties(...)`
+4. Hydrate flows → `hydrate_cell_flows(...)` and `hydrate_waterloo_inputs(...)`
+5. Fit → `fit_waterloo(config, grid, fit_inputs, cell_properties, cell_flows)` → `VelocityFieldHandle`
+6. Track → `run_simulation(sim_config, field, particles)`
+
+See the Quickstart guide for a complete MODFLOW-based example.
+
 ## Canonical Import
 
     import mp3du
@@ -102,7 +137,7 @@ class ParticleStart:
             ``z_local = (z_physical - bot) / (top - bot)``.
             Passing a physical elevation (e.g. ``z=5.0`` when ``top=10,
             bot=0``) causes immediate ``ExitedDomain`` because ``5.0 > 1.0``.
-        cell_id: Zero-based index of the MODFLOW cell that contains the
+        cell_id: Zero-based index of the grid cell that contains the
             particle's starting position.
         initial_dt: Initial time-step size for the adaptive tracker (model
             time units).  Set to a small positive value; the solver adjusts

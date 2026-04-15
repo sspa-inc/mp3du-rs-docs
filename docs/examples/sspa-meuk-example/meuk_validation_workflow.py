@@ -430,7 +430,7 @@ def _save_head_plot(heads_2d, base_particles, drifts, all_trajectories, simulati
 
     fig.suptitle(f"Example 5a — MEUK SSP&A with dispersion  (1 of {N_REPEATS} repeats)",
                  fontsize=12)
-    out_path = os.path.join(out_dir, "run_mp3du_rs_head_plot.png")
+    out_path = os.path.join(out_dir, "meuk_validation_workflow_head_plot.png")
     fig.savefig(out_path, dpi=150)
     plt.close(fig)
     print(f"  Head-contour plot saved: {out_path}")

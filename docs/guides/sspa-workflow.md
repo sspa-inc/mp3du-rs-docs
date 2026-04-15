@@ -37,6 +37,9 @@ Call `mp3du.fit_sspa(config, grid, inputs, drifts)` with an `SspaConfig`, the gr
 ### 6. Configure and Run Simulation
 Create a `SimulationConfig`, define `ParticleStart` locations, and call `mp3du.run_simulation()` using the fitted velocity field.
 
+!!! note "SimulationConfig velocity_method"
+    Even when using the SSP&A method to fit the velocity field, the `velocity_method` in the `SimulationConfig` JSON must still be set to `"Waterloo"`. This is because `"Waterloo"` is currently the only supported velocity method in the configuration schema, and the underlying solver uses a unified interface for both field types.
+
 ## Common Mistakes
 
 ### Passing Both conductivity Arguments

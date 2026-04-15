@@ -14,42 +14,42 @@ This example demonstrates a complete workflow for tracking particles from a regi
 
 ## Running the Examples
 
-The scripts for this example require data files (`mp3du.gsf`, `Heads_for_MEUK.asc`, `MEUK_WELLS.csv`, `PartStart_Intersect.*`) that are located in the `Examples/Example5a/02-MEUK_Equivalent/` directory of the mod-PATH3DU repository.
+The scripts for this example are not self-contained downloads. They depend on external model data files (`mp3du.gsf`, `Heads_for_MEUK.asc`, `MEUK_WELLS.csv`, `PartStart_Intersect.*`) from `Examples/Example5a/02-MEUK_Equivalent/` in the mod-PATH3DU repository. The validation workflow also depends on legacy reference shapefiles in `Examples/Example5a/Shapefiles/`.
 
 To run these scripts, you must execute them from within that directory:
 
 ```bash
 cd Examples/Example5a/02-MEUK_Equivalent/
-python run_simple.py
-python run_mp3du_rs.py
+python meuk_tutorial_smoke_test.py
+python meuk_validation_workflow.py
 ```
 
-## 1. Tutorial Script (`run_simple.py`)
+## 1. Tutorial Script (`meuk_tutorial_smoke_test.py`)
 
-This is a minimal "smoke test" or tutorial script. It runs one particle per release location with **no dispersion** and **no repeats**. It focuses purely on the core SSP&A workflow: loading the grid, heads, and wells, fitting the velocity field, running the simulation, and plotting the pathlines.
+This is a minimal "smoke test" or tutorial script. It runs one particle per release location with **no dispersion** and **no repeats**. It focuses purely on the core SSP&A workflow: loading the grid, heads, and wells, fitting the velocity field, running the simulation, and plotting the pathlines. It still requires the external Example 5a input files listed above.
 
 ### Output
 
-![Simple Run Plot](../assets/images/run_simple_plot.png)
+![Simple Run Plot](../assets/images/meuk_tutorial_smoke_test_plot.png)
 
 ### Code
 
 ```python
---8<-- "docs/examples/sspa-meuk-example/run_simple.py"
+--8<-- "docs/examples/sspa-meuk-example/meuk_tutorial_smoke_test.py"
 ```
 
-## 2. Validation Script (`run_mp3du_rs.py`)
+## 2. Validation Script (`meuk_validation_workflow.py`)
 
-This is a full validation script. It includes dispersion, runs Monte Carlo repeats (e.g., 100 to 5000 times per particle), bins the endpoints into a concentration grid, loads the legacy C++ reference shapefiles, and computes quantitative validation metrics (Pearson correlation, normalized RMSE, mass error) to prove the Rust engine matches the legacy C++ engine.
+This is a full validation script. It includes dispersion, runs Monte Carlo repeats (e.g., 100 to 5000 times per particle), bins the endpoints into a concentration grid, loads the legacy C++ reference shapefiles, and computes quantitative validation metrics (Pearson correlation, normalized RMSE, mass error) to prove the Rust engine matches the legacy C++ engine. Besides the Example 5a input files, it also requires the reference shapefiles from `Examples/Example5a/Shapefiles/`.
 
 ### Output
 
-![Validation Head Plot](../assets/images/run_mp3du_rs_head_plot.png)
+![Validation Head Plot](../assets/images/meuk_validation_workflow_head_plot.png)
 
 ### Code
 
 ```python
---8<-- "docs/examples/sspa-meuk-example/run_mp3du_rs.py"
+--8<-- "docs/examples/sspa-meuk-example/meuk_validation_workflow.py"
 ```
 
 ## See Also

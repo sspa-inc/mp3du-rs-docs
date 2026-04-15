@@ -4,13 +4,20 @@ Because `mp3du` is a specialized, modern particle tracking engine with strict
 data-loading conventions, general-purpose AI assistants can easily fall back to
 older MODPATH habits and produce plausible-looking but wrong code.
 
+**Important:** `mp3du` supports two upstream data sources — not just MODFLOW.
+It can track particles on a velocity field fitted from MODFLOW flow budgets
+(Waterloo method) **or** from gridded heads / conductivity such as a
+water-level raster from MEUK or any other interpolation tool (SSP&A method).
+The prompts below cover both paths.
+
 The prompts below are designed around a practical agent workflow:
 
 1. Prime the agent on the authoritative docs
-2. Inspect the actual MODFLOW workspace before writing code
-3. Generate code or configuration with explicit guardrails
-4. Review the result against the docs before trusting it
-5. Troubleshoot with doc-backed checks when trajectories look wrong
+2. Classify the upstream data source (MODFLOW model vs. water-level raster / custom grid)
+3. Inspect the actual workspace before writing code
+4. Generate code or configuration with explicit guardrails
+5. Review the result against the docs before trusting it
+6. Troubleshoot with doc-backed checks when trajectories look wrong
 
 These prompts assume the agent can read URLs or local copies of the
 documentation. If it cannot access a source, it should say which source is
@@ -24,13 +31,25 @@ directly into the chat as a substitute.
 
 These are the highest-value references to name explicitly in your prompt:
 
-- `https://sspa-inc.github.io/mp3du-rs-docs/llms.txt` - compact LLM primer
+**General (both paths):**
+
+- `https://sspa-inc.github.io/mp3du-rs-docs/llms.txt` - compact LLM primer (includes two-path decision table)
 - `https://sspa-inc.github.io/mp3du-rs-docs/llms-full.txt` - full machine-readable reference
-- `https://sspa-inc.github.io/mp3du-rs-docs/getting-started/quickstart/` - first end-to-end example
-- `https://sspa-inc.github.io/mp3du-rs-docs/reference/units-and-conventions/` - sign conventions, `water_table`, indexing, CSR layout
-- `https://sspa-inc.github.io/mp3du-rs-docs/reference/iface-flow-routing/` - IFACE bucket routing and `q_vert` rules
 - `https://sspa-inc.github.io/mp3du-rs-docs/guides/building-configs/` - `SimulationConfig` patterns
 - `https://sspa-inc.github.io/mp3du-rs-docs/guides/troubleshooting/` - common capture and hydration problems
+
+**MODFLOW / Waterloo path:**
+
+- `https://sspa-inc.github.io/mp3du-rs-docs/getting-started/quickstart/` - first end-to-end MODFLOW example
+- `https://sspa-inc.github.io/mp3du-rs-docs/reference/units-and-conventions/` - sign conventions, `water_table`, indexing, CSR layout
+- `https://sspa-inc.github.io/mp3du-rs-docs/reference/iface-flow-routing/` - IFACE bucket routing and `q_vert` rules
+
+**Raster / MEUK / SSP&A path:**
+
+- `https://sspa-inc.github.io/mp3du-rs-docs/concepts/sspa-velocity/` - SSP&A velocity method concepts
+- `https://sspa-inc.github.io/mp3du-rs-docs/guides/sspa-workflow/` - SSP&A workflow guide
+- `https://sspa-inc.github.io/mp3du-rs-docs/examples/sspa-water-level/` - SSP&A water-level raster example
+- `https://sspa-inc.github.io/mp3du-rs-docs/reference/python-api/` - full Python API (includes `hydrate_sspa_inputs`, `fit_sspa`)
 
 ---
 
@@ -122,8 +141,8 @@ These are the highest-value references to name explicitly in your prompt:
 > - Build the configuration via `mp3du.SimulationConfig.from_json(json.dumps(config_dict))` and call `config.validate()`.
 > - Construct `water_table` from layer type as follows: confined `0 -> top`, unconfined `1 -> head`, convertible `> 0 -> min(head, top)`.
 > - Determine which MODFLOW version produced the flow data — the sign conventions differ:
->   - MODFLOW-USG/MF6 (`FLOW-JA-FACE`): raw positive = INTO cell. Negate once: `face_flow = -flowja`. Pass the same `face_flow` to both `hydrate_cell_flows()` and `hydrate_waterloo_inputs()`.
->   - MODFLOW-2005/NWT (after directional→per-face assembly): result is positive = OUT. Pass directly to both `hydrate_cell_flows()` and `hydrate_waterloo_inputs()`.
+>   - MODFLOW-USG/MF6 (`FLOW-JA-FACE`): raw positive = INTO cell. Pass directly: `face_flow = flowja`. Pass the same `face_flow` to both `hydrate_cell_flows()` and `hydrate_waterloo_inputs()`.
+>   - MODFLOW-2005/NWT (after directional→per-face assembly): result is positive = OUT. Negate once: `face_flow = -assembled`. Pass the same `face_flow` to both `hydrate_cell_flows()` and `hydrate_waterloo_inputs()`.
 > - Pass `z` as a local normalized coordinate [0, 1] in `ParticleStart`, NOT a physical elevation. `0.0` = cell bottom, `1.0` = cell top.
 > - Pass direct per-cell `q_well` arrays in raw MODFLOW sign to both hydration functions — never negate `q_well`.
 > - If you are starting from IFACE-tagged `bc_flow` records, keep `bc_flow` in raw MODFLOW sign and use the documented IFACE routing rules, or `route_iface_bc_flows()`, to build per-cell `q_well`, `q_other`, `q_top`, and `q_bot` contributions.
@@ -263,3 +282,92 @@ These are the highest-value references to name explicitly in your prompt:
 > - missing or wrong `bc_*` arrays
 > - misuse of `has_well` or `is_domain_boundary`
 > - capture settings such as `capture_radius` or `face_epsilon`
+
+---
+
+## 8. The Raster / MEUK Intake Prompt
+
+*Use this when your upstream data is not a MODFLOW model, but a water-level raster, interpolated head surface, MEUK output, or other gridded head dataset.*
+
+**Recommended role:** project intake analyst for SSP&A / raster-driven particle tracking.
+
+**Prompt:**
+
+> Act as an expert hydrogeologist and scientific Python developer specializing in gridded groundwater heads, raster processing, and `mp3du`.
+>
+> I am NOT starting from a MODFLOW model. I am starting from a water-level surface such as a raster, interpolated heads, or MEUK output.
+>
+> Before proposing code, read these sources:
+> - `https://sspa-inc.github.io/mp3du-rs-docs/llms.txt`
+> - `https://sspa-inc.github.io/mp3du-rs-docs/llms-full.txt`
+> - `https://sspa-inc.github.io/mp3du-rs-docs/concepts/sspa-velocity/`
+> - `https://sspa-inc.github.io/mp3du-rs-docs/guides/sspa-workflow/`
+> - `https://sspa-inc.github.io/mp3du-rs-docs/examples/sspa-water-level/`
+>
+> Treat the published docs as authoritative. Do not assume MODFLOW arrays such as `face_flow`, `q_well`, IFACE metadata, or `flopy` are required unless I explicitly say I have them.
+>
+> First, inspect my available inputs and tell me whether they are sufficient for the SSP&A path in `mp3du`.
+>
+> Return exactly these sections:
+> 1. `Observed inputs`
+> 2. `Recommended mp3du path`
+> 3. `Grid and sampling requirements`
+> 4. `Arrays needed for hydrate_sspa_inputs()`
+> 5. `Drifts still needed`
+> 6. `Known risks or missing information`
+> 7. `Recommended next prompt`
+>
+> In your intake, explicitly address:
+> - how the raster / MEUK surface will be sampled or mapped onto grid cells
+> - whether the grid already exists or must be built for `build_grid()`
+> - how heads, porosity, and conductivity will be assembled for `hydrate_sspa_inputs()`
+> - whether wells / line sinks / no-flow boundaries must be supplied as SSP&A drifts
+> - what information is still missing before `fit_sspa()` can be called
+
+---
+
+## 9. The Raster / MEUK End-to-End SSP&A Prompt
+
+*Use this when you want a full Python script that starts from a water-level raster, interpolated head surface, MEUK output, or other non-MODFLOW gridded heads and runs particle tracking through SSP&A.*
+
+**Recommended role:** implementation partner for SSP&A / raster-driven workflows.
+
+**Prompt:**
+
+> Act as an expert hydrogeologist and scientific Python developer specializing in raster-based groundwater surfaces, scientific Python, and `mp3du`.
+>
+> I am NOT starting from a MODFLOW model. I am starting from a water-level raster, interpolated head surface, or MEUK output that I want to use with `mp3du`.
+>
+> Before writing code, read these sources:
+> - `https://sspa-inc.github.io/mp3du-rs-docs/llms-full.txt`
+> - `https://sspa-inc.github.io/mp3du-rs-docs/concepts/sspa-velocity/`
+> - `https://sspa-inc.github.io/mp3du-rs-docs/guides/sspa-workflow/`
+> - `https://sspa-inc.github.io/mp3du-rs-docs/examples/sspa-water-level/`
+> - `https://sspa-inc.github.io/mp3du-rs-docs/guides/building-configs/`
+> - `https://sspa-inc.github.io/mp3du-rs-docs/guides/troubleshooting/`
+>
+> Write a complete Python script that:
+> 1. Loads or receives a grid suitable for `build_grid()`.
+> 2. Loads or samples heads from the raster / MEUK surface onto grid cells.
+> 3. Loads or prepares porosity and conductivity arrays for the same cells.
+> 4. Calls `build_grid()` and `hydrate_sspa_inputs()`.
+> 5. Defines SSP&A drifts for wells, line sinks, or no-flow boundaries if needed.
+> 6. Fits the SSP&A velocity field with `fit_sspa()`.
+> 7. Builds a valid `SimulationConfig`, tracks at least one particle, and plots the trajectory.
+>
+> Non-negotiable implementation rules:
+> - Use `import mp3du` as the canonical import.
+> - Treat this as an SSP&A workflow, not a MODFLOW / Waterloo workflow, unless I explicitly provide MODFLOW flow budgets.
+> - Do not invent `face_flow`, `q_vert`, IFACE metadata, or `flopy` usage unless they are actually needed and available.
+> - Use `build_grid()` for the tracking grid and `hydrate_sspa_inputs()` for heads / porosity / conductivity.
+> - Pass exactly one of `hydraulic_conductivity=` or `hhk=` to `hydrate_sspa_inputs()`.
+> - Ensure all SSP&A arrays have shape `(n_cells,)`.
+> - Treat `well_mask` as a boolean per-cell mask, not a list of well IDs.
+> - Build the configuration via `mp3du.SimulationConfig.from_json(json.dumps(config_dict))` and call `config.validate()`.
+> - Pass `z` as a local normalized coordinate [0, 1] in `ParticleStart`, NOT a physical elevation.
+> - If a required raster-processing or grid-mapping step cannot be determined from the available files, leave an explicit TODO and explain the blocker instead of guessing.
+>
+> Return:
+> 1. The script
+> 2. A short `Assumptions / TODOs` section
+> 3. A short `Validation checklist` with the first doc-backed checks I should run

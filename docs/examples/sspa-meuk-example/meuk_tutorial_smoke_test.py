@@ -357,7 +357,7 @@ def _save_plot(heads_2d, particles, drifts, all_trajectories, simulations, out_d
 
     fig.suptitle("Example 5a — MEUK SSP&A particle paths (no dispersion)", fontsize=12)
 
-    out_path = os.path.join(out_dir, "run_simple_plot.png")
+    out_path = os.path.join(out_dir, "meuk_tutorial_smoke_test_plot.png")
     fig.savefig(out_path, dpi=150)
     plt.close(fig)
     print(f"\nPlot saved: {out_path}")

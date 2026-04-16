@@ -16,7 +16,8 @@
   "properties": {
     "velocity_method": {
       "type": "string",
-      "enum": ["Waterloo"]
+      "enum": ["Waterloo"],
+      "description": "Velocity-method selector used by the SimulationConfig schema. Currently only `Waterloo` is accepted here. SSP&A workflows still use `Waterloo` in the config because the SSP&A velocity field is fitted outside the JSON config and then tracked through the same runtime interface."
     },
     "solver": {
       "type": "string",
@@ -99,20 +100,36 @@
         "stagnation_limit"
       ],
       "properties": {
-        "max_time": { "type": "number", "exclusiveMinimum": 0 },
-        "max_steps": { "type": "integer", "minimum": 1 },
-        "stagnation_velocity": { "type": "number", "minimum": 0 },
-        "stagnation_limit": { "type": "integer", "minimum": 1 },
+        "max_time": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Maximum cumulative tracking time for one particle, in the model's time units (for example days or seconds). The particle terminates once its accumulated travel time reaches or exceeds this value."
+        },
+        "max_steps": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum number of accepted integration steps for one particle. This is unitless and acts as a safety cap on solver work even if the particle has not yet been captured or reached max_time."
+        },
+        "stagnation_velocity": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Velocity-magnitude threshold used for stagnation detection, in model length per model time (for example m/day or ft/s). A step is counted as stagnant when the particle velocity magnitude is below this value."
+        },
+        "stagnation_limit": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of consecutive stagnant accepted steps required before termination. If velocity rises back above stagnation_velocity, the stagnation counter resets to zero."
+        },
         "capture_radius": {
           "type": "number",
           "exclusiveMinimum": 0,
-          "description": "Distance from well centre (cell centre) within which a particle is captured. Omit or set to null for immediate capture on cell entry."
+          "description": "Distance from the well centre (cell centre) used for internal-well capture. A particle is terminated only after it gets within this radius of the centre. Smaller values delay capture until the particle is very near the centre; larger values make capture occur sooner after entering the well cell."
         },
         "face_epsilon": {
           "type": "number",
           "exclusiveMinimum": 0,
           "default": 1e-6,
-          "description": "Tolerance for top/bottom face proximity checks during IFACE-based capture. Particle is considered at the face when z > 1 - face_epsilon (top) or z < face_epsilon (bottom). Default: 1e-6."
+          "description": "Tolerance for top/bottom face proximity checks during IFACE-based capture. Particle is considered at the face when z > 1 - face_epsilon (top) or z < face_epsilon (bottom). Increase only if particles leak through top/bottom capture faces; decrease only if they are being captured too far from the face. Default: 1e-6."
         }
       },
       "additionalProperties": false

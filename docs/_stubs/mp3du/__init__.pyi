@@ -199,6 +199,13 @@ class SspaConfig:
     Args:
         search_radius: Neighbourhood search radius used when selecting
             conditioning data for each kriging estimate (model units).
+            This only needs to span a few raster cells — typically 2–3×
+            the cell size of the input raster.  Best practice: read the
+            cell size from each input raster (e.g. via ``rasterio``) and
+            set ``search_radius = 2 * cell_size`` (or ``3 * cell_size``
+            for safety).  A radius that is too large wastes time and
+            over-smooths; a radius that is too small under-determines
+            the kriging system and produces noisy velocities.
         krig_offset: Small offset added to the kriging variogram nugget to
             improve numerical stability. Default is ``0.1``.
     """
@@ -207,7 +214,11 @@ class SspaConfig:
 
     @property
     def search_radius(self) -> float:
-        """Neighbourhood search radius for kriging (model units)."""
+        """Neighbourhood search radius for kriging (model units).
+
+        Should be 2–3× the raster cell size.  Read the cell size from
+        each input raster and set dynamically rather than hard-coding.
+        """
         ...
 
     @property

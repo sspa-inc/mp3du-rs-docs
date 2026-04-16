@@ -27,7 +27,7 @@ To use the SSP&A method, you need the following inputs:
 - [x] **Porosity**: A 1D numpy array of porosity per cell, shape `(n_cells,)`.
 - [x] **Well Mask**: A boolean array over cells indicating which cells contain wells, shape `(n_cells,)`.
 - [x] **Drifts**: A list of dictionaries defining the analytic elements (wells, line-sinks, no-flow boundaries). See the [SSP&A Drift Schema](../reference/python-api/sspa-drift-schema.md).
-- [x] **SspaConfig**: Configuration object specifying `search_radius` and `krig_offset`.
+- [x] **SspaConfig**: Configuration object specifying `search_radius` and `krig_offset`. The `search_radius` only needs to span a few raster cells — set it to **2–3× the cell size** of the input raster. Best practice is to read the cell size from each raster (e.g. via `rasterio`) and compute `search_radius` dynamically rather than hard-coding a value.
 
 ## Understanding well_mask
 The `well_mask` is a boolean array over cells with the same length as the number of cells in the grid. It is *not* a list of well locations. Instead, it acts as a flag for the kriging algorithm. Cells where `well_mask` is `True` are excluded from the background velocity interpolation, as their local gradients are assumed to be dominated by the well (which will be handled separately by a drift element).
@@ -42,6 +42,9 @@ Drifts are analytic elements superimposed on the kriged background velocity fiel
 
 ### O(n²) Fitting Cost
 The kriging process used to fit the SSP&A velocity field has an O(n²) computational complexity, where n is the number of cells. This means that fitting the field can be significantly slower than the Waterloo method, especially for large models.
+
+### Performance Feature: On-Demand Cell Setup
+Even though SSP&A has an expensive neighborhood-building step up front, mod-PATH3DU does **not** fully prepare every cell before tracking starts. Instead, it finishes the heavier per-cell setup only when a particle actually needs velocity in that cell. In practice, this means you only pay the full per-cell cost for cells that particles actually visit.
 
 ### Line-Sink / No-Flow Capture Not Yet Implemented
 While line-sinks and no-flow boundaries influence the interpolated velocity field, explicit particle capture (termination) at line-sinks or reflection at no-flow boundaries is not yet implemented in the tracking engine. Currently, only well capture is fully supported.

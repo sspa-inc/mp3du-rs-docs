@@ -37,6 +37,9 @@ drifts = [{"type": "well", "event": "SS", "term": 1, "name": "W1",
            "value": -50.0, "x": 15.0, "y": 15.0}]
 
 # 5. Fit velocity field (consumes grid!)
+# search_radius should be 2–3× the raster cell size — read it dynamically:
+#   import rasterio; cell_size = rasterio.open("heads.tif").res[0]
+#   search_radius = 2.0 * cell_size
 cfg = mp3du.SspaConfig(search_radius=50.0, krig_offset=0.1)
 field = mp3du.fit_sspa(cfg, grid, inputs, drifts)
 # grid is now invalid — do not reuse
@@ -116,7 +119,11 @@ inputs = mp3du.hydrate_sspa_inputs(
 
 ### 6. Fit the Velocity Field
 We fit the SSP&A velocity field using the config, grid, inputs, and drifts.
+`search_radius` should be 2–3× the raster cell size — read it dynamically rather than hard-coding.
 ```python
+# Best practice: derive search_radius from the raster cell size
+# import rasterio; cell_size = rasterio.open("heads.tif").res[0]
+# search_radius = 2.0 * cell_size
 cfg = mp3du.SspaConfig(search_radius=300.0, krig_offset=0.1)
 field = mp3du.fit_sspa(cfg, grid, inputs, drifts)
 # grid is now consumed and cannot be reused
@@ -146,8 +153,77 @@ for res in results:
     print(f"Particle {res.particle_id}: {res.final_status}, {len(records)} steps")
 ```
 
+### 9. Understand What Happened
+
+After `run_simulation()` returns, every particle has a `final_status` that tells you
+why it stopped. This is the single most important thing to check:
+
+```python
+from collections import Counter
+status_counts = Counter(r.final_status for r in results)
+for status, count in status_counts.most_common():
+    print(f"  {status}: {count}")
+```
+
+| `final_status` | Meaning | Action |
+|---|---|---|
+| `CapturedByWell` | Reached a well within `capture_radius` | ✅ Expected near pumping wells |
+| `CapturedAtModelEdge` | Hit a domain-boundary cell | Check if the boundary is realistic |
+| `Exited` | Left the grid entirely | Normal at model edges; unexpected in the interior |
+| `MaxTime` | Ran out of simulation time | Increase `capture.max_time` |
+| `MaxSteps` | Ran out of integration steps | Increase `capture.max_steps` or loosen `adaptive.tolerance` |
+| `Stagnated` | Velocity too low for too long | Lower `stagnation_velocity` or check head field |
+| `Error` | Solver failure | See [Troubleshooting](../guides/troubleshooting.md) |
+
+!!! warning "If most particles show `MaxSteps` or `Stagnated`"
+    This usually means the velocity field is near-zero everywhere. Check:
+
+    1. `np.ptp(heads)` — is the head range realistic? A flat head field produces no flow.
+    2. Hydraulic conductivity values — are they in the right units and magnitude?
+    3. `stagnation_velocity` — if set too high (e.g. `1e-6`), slow but valid flow will be flagged as stagnant. Try `1e-14` while debugging.
+    4. `max_time` — for regional models with slow flow, particles may need millions of days.
+
+### 10. Plot Pathlines
+
+A quick visual check is the best way to verify results:
+
+```python
+import matplotlib.pyplot as plt
+import numpy as np
+
+fig, ax = plt.subplots(figsize=(10, 8))
+cx = np.array([c[0] for c in centers])
+cy = np.array([c[1] for c in centers])
+ax.tricontourf(cx, cy, heads, levels=20, cmap="Blues")
+ax.tricontour(cx, cy, heads, levels=20, colors="grey", linewidths=0.3)
+
+for res in results:
+    recs = res.to_records()
+    xs = [r["x"] for r in recs]
+    ys = [r["y"] for r in recs]
+    ax.plot(xs, ys, "r-", linewidth=0.5)
+    ax.plot(xs[0], ys[0], "go", markersize=3)
+    ax.plot(xs[-1], ys[-1], "rs", markersize=3)
+
+ax.set_aspect("equal")
+ax.set_title("SSP&A Pathlines")
+plt.savefig("pathlines.png", dpi=150)
+plt.show()
+```
+
+Pathlines should follow the head gradient (high → low for forward tracking) and curve toward wells.
+
 ## Performance Notes
 **Warning:** The `fit_sspa()` function uses kriging, which has an O(n²) computational cost (where n is the number of cells). For a 201×201 grid (40,401 cells), fitting takes approximately 350 seconds. Plan accordingly for large regional models.
+
+## Troubleshooting
+
+See the [SSP&A Workflow — Diagnosing Silent Failures](../guides/sspa-workflow.md#diagnosing-silent-failures) section for a comprehensive checklist covering:
+
+- All particles stagnating or hitting `MaxSteps`
+- Particles exiting immediately
+- `fit_sspa()` producing wrong velocities
+- Particles curving the wrong direction
 
 ## Full Validation Script
 For a complete, runnable script that includes file I/O, dispersion, and result plotting, see the [MEUK Example (SSP&A)](sspa-meuk-example.md) example.

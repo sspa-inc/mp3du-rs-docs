@@ -21,27 +21,27 @@ Configuration contract for `SimulationConfig`. Generated from `mp3du-rs/python/m
 | Property | Type | Required | Default | Constraints | Description |
 |----------|------|----------|---------|-------------|-------------|
 | `velocity_method` | string | Yes | — | one of: `Waterloo` | Velocity-method selector used by the SimulationConfig schema. Currently only `Waterloo` is accepted here. SSP&A workflows still use `Waterloo` in the config because the SSP&A velocity field is fitted outside the JSON config and then tracked through the same runtime interface. |
-| `solver` | string | Yes | — | one of: `Euler`, `Rk4StepDoubling`, `DormandPrince`, `CashKarp`, `VernerRobust`, `VernerEfficient` | — |
-| `adaptive` | object | Yes | — | — | — |
-| `dispersion` | object (`"None"` \| `"Gsde"` \| `"Ito"`) | Yes | — | — | — |
-| `retardation_enabled` | boolean | Yes | — | — | — |
+| `solver` | string | Yes | — | one of: `Euler`, `Rk4StepDoubling`, `DormandPrince`, `CashKarp`, `VernerRobust`, `VernerEfficient` | Runge-Kutta solver variant for particle integration. `Euler` uses a fixed step (non-adaptive). `Rk4StepDoubling` is a classic RK4 with step-doubling error control. `DormandPrince` is the recommended default (embedded 4/5 pair). `CashKarp` is an alternative 4/5 pair. `VernerRobust` and `VernerEfficient` are 6/7 pairs for high-accuracy work. |
+| `adaptive` | object | Yes | — | — | Adaptive time-stepping parameters that control how the solver adjusts dt between integration steps. All fields are required even when using the non-adaptive Euler solver. |
+| `dispersion` | object (`"None"` \| `"Gsde"` \| `"Ito"`) | Yes | — | — | Dispersion model configuration. Choose `None` for pure advection, `Gsde` for the generalised stochastic differential equation method, or `Ito` for the Itô-calculus formulation. When dispersion is enabled, each particle run is stochastic — run multiple realisations (Monte Carlo) to build concentration fields. |
+| `retardation_enabled` | boolean | Yes | — | — | When true, the solver multiplies each cell's velocity by 1/R where R is the retardation factor from the cell properties. Requires that retardation factors were provided during hydration. Set to false for conservative (non-sorbing) transport. |
 | `capture` | object | Yes | — | — | — |
-| `initial_dt` | number | Yes | — | > 0 | — |
-| `max_dt` | number | Yes | — | > 0 | — |
-| `direction` | number | Yes | — | one of: `1.0`, `-1.0` | — |
+| `initial_dt` | number | Yes | — | > 0 | Starting time step for the first integration step of each particle, in model time units. The adaptive solver will adjust this after the first step. For the Euler solver this is overridden by adaptive.euler_dt. |
+| `max_dt` | number | Yes | — | > 0 | Upper bound on the time step in model time units. The adaptive solver will never grow dt beyond this value, even if the error estimate would allow it. Prevents particles from jumping over cells in smooth regions. |
+| `direction` | number | Yes | — | one of: `1.0`, `-1.0` | Tracking direction. Use 1.0 for forward tracking (particles move downgradient / in the direction of flow) or -1.0 for backward tracking (particles move upgradient / against the flow direction). Must be exactly 1.0 or -1.0 — integer values (1, -1) are rejected by the schema. |
 
 ### adaptive
 
 | Property | Type | Required | Default | Constraints | Description |
 |----------|------|----------|---------|-------------|-------------|
-| `tolerance` | number | Yes | — | > 0 | — |
-| `safety` | number | Yes | — | > 0 | — |
-| `alpha` | number | Yes | — | > 0 | — |
-| `min_scale` | number | Yes | — | > 0 | — |
-| `max_scale` | number | Yes | — | > 0 | — |
-| `max_rejects` | integer | Yes | — | ≥ 0 | — |
-| `min_dt` | number | Yes | — | > 0 | — |
-| `euler_dt` | number | Yes | — | > 0 | — |
+| `tolerance` | number | Yes | — | > 0 | Local truncation error threshold for step acceptance. The solver compares its embedded-pair error estimate against this value; steps with error ≤ tolerance are accepted. Smaller values produce more accurate trajectories but require more (smaller) steps. Typical starting value: 1e-6. |
+| `safety` | number | Yes | — | > 0 | Safety factor (S) applied when computing the next step size: h_new = h × S × (tol/err)^alpha. Values < 1 (typically 0.8–0.95) make step-size growth conservative, reducing the chance of immediate rejection on the next step. Recommended: 0.9. |
+| `alpha` | number | Yes | — | > 0 | Exponent in the step-scaling formula h_new = h × S × (tol/err)^alpha. Derived from the solver order: for a method of order p, the optimal value is 1/(p+1). Use 0.2 for 4th/5th-order pairs (DormandPrince, CashKarp) and ~0.125 for 6th/7th-order pairs (Verner). |
+| `min_scale` | number | Yes | — | > 0 | Minimum allowed step-size scaling factor. After a rejected step the new dt cannot shrink below min_scale × current dt. Prevents pathological collapse of the step size. Typical value: 0.2 (step can shrink to at most 1/5th). |
+| `max_scale` | number | Yes | — | > 0 | Maximum allowed step-size scaling factor. After an accepted step the new dt cannot grow beyond max_scale × current dt. Prevents overshooting into a region where the step would be rejected. Typical value: 5.0. |
+| `max_rejects` | integer | Yes | — | ≥ 0 | Maximum number of consecutive rejected steps before the solver terminates the particle with an error. Increase this (e.g. to 50) if particles encounter sharp velocity gradients that need many successive reductions. Default recommendation: 10. |
+| `min_dt` | number | Yes | — | > 0 | Absolute minimum time step in model time units. If the adaptive algorithm needs a step smaller than this, the particle terminates with an error. Set small enough to handle tight regions but large enough to prevent the solver from stalling indefinitely. Typical value: 1e-10. |
+| `euler_dt` | number | Yes | — | > 0 | Fixed time step used exclusively by the Euler solver (which is non-adaptive). Ignored by all other solvers. In model time units. |
 
 ### capture
 
@@ -77,25 +77,25 @@ The `dispersion` property uses one of the following variant schemas:
 
 | Property | Type | Required | Default | Constraints | Description |
 |----------|------|----------|---------|-------------|-------------|
-| `method` | string | Yes | — | must be `None` | — |
+| `method` | string | Yes | — | must be `None` | Disables dispersion. Particles follow pure advective streamlines. |
 
 #### Variant: `"Gsde"`
 
 | Property | Type | Required | Default | Constraints | Description |
 |----------|------|----------|---------|-------------|-------------|
-| `method` | string | Yes | — | must be `Gsde` | — |
-| `alpha_l` | number | Yes | — | ≥ 0 | — |
-| `alpha_th` | number | Yes | — | ≥ 0 | — |
-| `alpha_tv` | number | Yes | — | ≥ 0 | — |
+| `method` | string | Yes | — | must be `Gsde` | Generalised Stochastic Differential Equation dispersion method. |
+| `alpha_l` | number | Yes | — | ≥ 0 | Longitudinal dispersivity — spreading along the flow direction, in model length units (e.g. metres). Must be ≥ alpha_th ≥ alpha_tv. |
+| `alpha_th` | number | Yes | — | ≥ 0 | Horizontal transverse dispersivity — spreading perpendicular to flow in the horizontal plane, in model length units. |
+| `alpha_tv` | number | Yes | — | ≥ 0 | Vertical transverse dispersivity — spreading perpendicular to flow in the vertical direction, in model length units. Typically the smallest of the three. |
 
 #### Variant: `"Ito"`
 
 | Property | Type | Required | Default | Constraints | Description |
 |----------|------|----------|---------|-------------|-------------|
-| `method` | string | Yes | — | must be `Ito` | — |
-| `alpha_l` | number | Yes | — | ≥ 0 | — |
-| `alpha_th` | number | Yes | — | ≥ 0 | — |
-| `alpha_tv` | number | Yes | — | ≥ 0 | — |
+| `method` | string | Yes | — | must be `Ito` | Itô-calculus dispersion formulation. |
+| `alpha_l` | number | Yes | — | ≥ 0 | Longitudinal dispersivity — spreading along the flow direction, in model length units (e.g. metres). Must be ≥ alpha_th ≥ alpha_tv. |
+| `alpha_th` | number | Yes | — | ≥ 0 | Horizontal transverse dispersivity — spreading perpendicular to flow in the horizontal plane, in model length units. |
+| `alpha_tv` | number | Yes | — | ≥ 0 | Vertical transverse dispersivity — spreading perpendicular to flow in the vertical direction, in model length units. Typically the smallest of the three. |
 
 ??? note "Raw JSON Schema"
     ```json
@@ -131,10 +131,12 @@ The `dispersion` property uses one of the following variant schemas:
             "CashKarp",
             "VernerRobust",
             "VernerEfficient"
-          ]
+          ],
+          "description": "Runge-Kutta solver variant for particle integration. `Euler` uses a fixed step (non-adaptive). `Rk4StepDoubling` is a classic RK4 with step-doubling error control. `DormandPrince` is the recommended default (embedded 4/5 pair). `CashKarp` is an alternative 4/5 pair. `VernerRobust` and `VernerEfficient` are 6/7 pairs for high-accuracy work."
         },
         "adaptive": {
           "type": "object",
+          "description": "Adaptive time-stepping parameters that control how the solver adjusts dt between integration steps. All fields are required even when using the non-adaptive Euler solver.",
           "required": [
             "tolerance",
             "safety",
@@ -148,40 +150,49 @@ The `dispersion` property uses one of the following variant schemas:
           "properties": {
             "tolerance": {
               "type": "number",
-              "exclusiveMinimum": 0
+              "exclusiveMinimum": 0,
+              "description": "Local truncation error threshold for step acceptance. The solver compares its embedded-pair error estimate against this value; steps with error \u2264 tolerance are accepted. Smaller values produce more accurate trajectories but require more (smaller) steps. Typical starting value: 1e-6."
             },
             "safety": {
               "type": "number",
-              "exclusiveMinimum": 0
+              "exclusiveMinimum": 0,
+              "description": "Safety factor (S) applied when computing the next step size: h_new = h \u00d7 S \u00d7 (tol/err)^alpha. Values < 1 (typically 0.8\u20130.95) make step-size growth conservative, reducing the chance of immediate rejection on the next step. Recommended: 0.9."
             },
             "alpha": {
               "type": "number",
-              "exclusiveMinimum": 0
+              "exclusiveMinimum": 0,
+              "description": "Exponent in the step-scaling formula h_new = h \u00d7 S \u00d7 (tol/err)^alpha. Derived from the solver order: for a method of order p, the optimal value is 1/(p+1). Use 0.2 for 4th/5th-order pairs (DormandPrince, CashKarp) and ~0.125 for 6th/7th-order pairs (Verner)."
             },
             "min_scale": {
               "type": "number",
-              "exclusiveMinimum": 0
+              "exclusiveMinimum": 0,
+              "description": "Minimum allowed step-size scaling factor. After a rejected step the new dt cannot shrink below min_scale \u00d7 current dt. Prevents pathological collapse of the step size. Typical value: 0.2 (step can shrink to at most 1/5th)."
             },
             "max_scale": {
               "type": "number",
-              "exclusiveMinimum": 0
+              "exclusiveMinimum": 0,
+              "description": "Maximum allowed step-size scaling factor. After an accepted step the new dt cannot grow beyond max_scale \u00d7 current dt. Prevents overshooting into a region where the step would be rejected. Typical value: 5.0."
             },
             "max_rejects": {
               "type": "integer",
-              "minimum": 0
+              "minimum": 0,
+              "description": "Maximum number of consecutive rejected steps before the solver terminates the particle with an error. Increase this (e.g. to 50) if particles encounter sharp velocity gradients that need many successive reductions. Default recommendation: 10."
             },
             "min_dt": {
               "type": "number",
-              "exclusiveMinimum": 0
+              "exclusiveMinimum": 0,
+              "description": "Absolute minimum time step in model time units. If the adaptive algorithm needs a step smaller than this, the particle terminates with an error. Set small enough to handle tight regions but large enough to prevent the solver from stalling indefinitely. Typical value: 1e-10."
             },
             "euler_dt": {
               "type": "number",
-              "exclusiveMinimum": 0
+              "exclusiveMinimum": 0,
+              "description": "Fixed time step used exclusively by the Euler solver (which is non-adaptive). Ignored by all other solvers. In model time units."
             }
           },
           "additionalProperties": false
         },
         "dispersion": {
+          "description": "Dispersion model configuration. Choose `None` for pure advection, `Gsde` for the generalised stochastic differential equation method, or `Ito` for the It\u00f4-calculus formulation. When dispersion is enabled, each particle run is stochastic \u2014 run multiple realisations (Monte Carlo) to build concentration fields.",
           "oneOf": [
             {
               "type": "object",
@@ -190,7 +201,8 @@ The `dispersion` property uses one of the following variant schemas:
               ],
               "properties": {
                 "method": {
-                  "const": "None"
+                  "const": "None",
+                  "description": "Disables dispersion. Particles follow pure advective streamlines."
                 }
               },
               "additionalProperties": false
@@ -205,19 +217,23 @@ The `dispersion` property uses one of the following variant schemas:
               ],
               "properties": {
                 "method": {
-                  "const": "Gsde"
+                  "const": "Gsde",
+                  "description": "Generalised Stochastic Differential Equation dispersion method."
                 },
                 "alpha_l": {
                   "type": "number",
-                  "minimum": 0
+                  "minimum": 0,
+                  "description": "Longitudinal dispersivity \u2014 spreading along the flow direction, in model length units (e.g. metres). Must be \u2265 alpha_th \u2265 alpha_tv."
                 },
                 "alpha_th": {
                   "type": "number",
-                  "minimum": 0
+                  "minimum": 0,
+                  "description": "Horizontal transverse dispersivity \u2014 spreading perpendicular to flow in the horizontal plane, in model length units."
                 },
                 "alpha_tv": {
                   "type": "number",
-                  "minimum": 0
+                  "minimum": 0,
+                  "description": "Vertical transverse dispersivity \u2014 spreading perpendicular to flow in the vertical direction, in model length units. Typically the smallest of the three."
                 }
               },
               "additionalProperties": false
@@ -232,19 +248,23 @@ The `dispersion` property uses one of the following variant schemas:
               ],
               "properties": {
                 "method": {
-                  "const": "Ito"
+                  "const": "Ito",
+                  "description": "It\u00f4-calculus dispersion formulation."
                 },
                 "alpha_l": {
                   "type": "number",
-                  "minimum": 0
+                  "minimum": 0,
+                  "description": "Longitudinal dispersivity \u2014 spreading along the flow direction, in model length units (e.g. metres). Must be \u2265 alpha_th \u2265 alpha_tv."
                 },
                 "alpha_th": {
                   "type": "number",
-                  "minimum": 0
+                  "minimum": 0,
+                  "description": "Horizontal transverse dispersivity \u2014 spreading perpendicular to flow in the horizontal plane, in model length units."
                 },
                 "alpha_tv": {
                   "type": "number",
-                  "minimum": 0
+                  "minimum": 0,
+                  "description": "Vertical transverse dispersivity \u2014 spreading perpendicular to flow in the vertical direction, in model length units. Typically the smallest of the three."
                 }
               },
               "additionalProperties": false
@@ -252,7 +272,8 @@ The `dispersion` property uses one of the following variant schemas:
           ]
         },
         "retardation_enabled": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "When true, the solver multiplies each cell's velocity by 1/R where R is the retardation factor from the cell properties. Requires that retardation factors were provided during hydration. Set to false for conservative (non-sorbing) transport."
         },
         "capture": {
           "type": "object",
@@ -299,18 +320,21 @@ The `dispersion` property uses one of the following variant schemas:
         },
         "initial_dt": {
           "type": "number",
-          "exclusiveMinimum": 0
+          "exclusiveMinimum": 0,
+          "description": "Starting time step for the first integration step of each particle, in model time units. The adaptive solver will adjust this after the first step. For the Euler solver this is overridden by adaptive.euler_dt."
         },
         "max_dt": {
           "type": "number",
-          "exclusiveMinimum": 0
+          "exclusiveMinimum": 0,
+          "description": "Upper bound on the time step in model time units. The adaptive solver will never grow dt beyond this value, even if the error estimate would allow it. Prevents particles from jumping over cells in smooth regions."
         },
         "direction": {
           "type": "number",
           "enum": [
             1.0,
             -1.0
-          ]
+          ],
+          "description": "Tracking direction. Use 1.0 for forward tracking (particles move downgradient / in the direction of flow) or -1.0 for backward tracking (particles move upgradient / against the flow direction). Must be exactly 1.0 or -1.0 \u2014 integer values (1, -1) are rejected by the schema."
         }
       },
       "additionalProperties": false

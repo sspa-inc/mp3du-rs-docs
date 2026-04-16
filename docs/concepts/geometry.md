@@ -62,6 +62,12 @@ The **Waterloo velocity interpolation method** constructs a continuous, divergen
 
 ### How It Works
 
+!!! tip "Performance feature: on-demand cell setup"
+    mod-PATH3DU does **not** do the full Waterloo cell setup everywhere before tracking starts.
+    It prepares the field, then finishes the heavier per-cell work only when a particle
+    actually needs velocity in that cell. In practice, this means you only pay the full
+    setup cost for cells that particles actually visit.
+
 For each cell, the method:
 
 1. Computes face midpoint velocities from the face flow rates and face geometry

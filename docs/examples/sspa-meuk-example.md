@@ -57,6 +57,58 @@ and legacy reference shapefiles.
 --8<-- "docs/examples/sspa-meuk-example/meuk_validation_workflow.py"
 ```
 
+## What to Do After the Script Runs
+
+### Quick Health Check
+
+After either script finishes, run this diagnostic snippet to understand what happened:
+
+```python
+from collections import Counter
+
+status_counts = Counter(r.final_status for r in results)
+print("=== Particle Status Summary ===")
+for status, count in status_counts.most_common():
+    print(f"  {status}: {count}")
+
+# Check if any particles actually moved
+for res in results[:3]:  # inspect first 3
+    recs = res.to_records()
+    if recs:
+        first, last = recs[0], recs[-1]
+        dist = ((last["x"] - first["x"])**2 + (last["y"] - first["y"])**2)**0.5
+        print(f"  Particle {res.particle_id}: {res.final_status}, "
+              f"moved {dist:.1f} m in {last['time']:.1f} days, {len(recs)} steps")
+```
+
+### Expected Outcomes
+
+For the **tutorial smoke test** (no dispersion, 1 realisation per particle):
+
+- Most particles should show `CapturedByWell`, `CapturedAtModelEdge`, or `Exited`.
+- Pathlines should follow the head gradient and curve toward the three extraction wells.
+- If all particles show `MaxSteps` or `Stagnated`, see the troubleshooting section below.
+
+For the **validation workflow** (with dispersion, Monte Carlo repeats):
+
+- Each particle is run many times (100–5000 realisations) with random dispersion.
+- The endpoint cloud is binned into a concentration grid and compared against the legacy C++ reference.
+- Expected metrics: Pearson correlation > 0.95, normalised RMSE < 0.1, mass error < 1%.
+
+### Common Problems
+
+| Symptom | Likely Cause | Fix |
+|---|---|---|
+| All particles `Stagnated` | Head field is flat or K is too small | Check `np.ptp(heads)` and K values |
+| All particles `MaxSteps` | `max_steps` too low or `tolerance` too tight | Increase `max_steps` to 1,000,000+ or loosen `tolerance` to 1e-5 |
+| All particles `Exited` immediately | Starting coordinates outside grid or wrong `cell_id` | Verify particle starts fall inside their assigned cells |
+| `fit_sspa()` hangs for hours | Grid is very large (> 50k cells) | Expected — kriging is O(n²). For 40k cells, ~350 s is normal |
+| Pathlines go the wrong direction | `direction` is `-1.0` instead of `1.0` | Use `1.0` for forward (downgradient) tracking |
+| Particles ignore wells | Well drifts missing or `well_mask` is all-False | Ensure drifts list includes all wells and `well_mask[cell]` is True for well cells |
+| Validation metrics are poor | Different dispersion settings or too few Monte Carlo repeats | Match the legacy C++ settings exactly; use ≥ 1000 repeats |
+
+For a comprehensive diagnostic guide, see [SSP&A Workflow — Diagnosing Silent Failures](../guides/sspa-workflow.md#diagnosing-silent-failures).
+
 ## See Also
 
 - [Tracking from Head Maps (SSP&A Workflow)](../guides/sspa-workflow.md)

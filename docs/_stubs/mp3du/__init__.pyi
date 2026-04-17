@@ -206,8 +206,10 @@ class SspaConfig:
             for safety).  A radius that is too large wastes time and
             over-smooths; a radius that is too small under-determines
             the kriging system and produces noisy velocities.
-        krig_offset: Small offset added to the kriging variogram nugget to
-            improve numerical stability. Default is ``0.1``.
+        krig_offset: Finite-difference offset used when estimating the
+            kriged head gradient near the particle. Smaller values sample
+            the gradient more locally; larger values smooth it over a
+            wider distance. Default is ``0.1``.
     """
 
     def __init__(self, search_radius: float, krig_offset: float = 0.1) -> None: ...
@@ -223,7 +225,7 @@ class SspaConfig:
 
     @property
     def krig_offset(self) -> float:
-        """Variogram nugget offset for numerical stability."""
+        """Finite-difference offset for kriged gradient estimation."""
         ...
 
 

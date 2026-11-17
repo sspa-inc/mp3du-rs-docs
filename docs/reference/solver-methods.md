@@ -22,7 +22,7 @@ mod-PATH3DU provides six Runge-Kutta ODE integration solvers for computing parti
 
 Forward Euler — a first-order, single-stage integrator. One velocity evaluation per step. No error estimation or adaptive step-size control.
 
-Used as an emergency fallback when the adaptive embedded solvers shrink the step size below the `euler_dt` threshold (typically $10^{-20}$). Not recommended for production simulations.
+Used as an emergency fallback when the adaptive embedded solvers shrink the step size below the `euler_dt` threshold (set it equal to `min_dt`, e.g. `1e-10`). Not recommended for production simulations.
 
 ### Mathematical Formulation
 
@@ -182,7 +182,7 @@ $$h_\text{new} = S \cdot h \cdot \left(\frac{\varepsilon}{\text{tol}}\right)^{-\
 where:
 
 - $S$ = `safety` factor (typically 0.9)
-- $\varepsilon$ = maximum relative error across all components
+- $\varepsilon$ = largest component of the estimated position error, each divided by the model extent in its direction ($x_{\max} - x_{\min}$, $y_{\max} - y_{\min}$, $z_{\max} - z_{\min}$)
 - $\text{tol}$ = `tolerance`
 - $\alpha$ = step-size exponent
 
@@ -190,17 +190,17 @@ The resulting scale factor is clamped to $[\text{min\_scale},\; \text{max\_scale
 
 | Parameter | Schema Field | Description |
 |-----------|-------------|-------------|
-| Tolerance | `adaptive.tolerance` | Target relative error per step |
+| Tolerance | `adaptive.tolerance` | Target error per step, as a fraction of the model extent |
 | Safety factor | `adaptive.safety` | Conservative multiplier for step growth (< 1) |
 | Exponent | `adaptive.alpha` | Controls step-size response to error |
 | Min scale | `adaptive.min_scale` | Floor on $h_\text{new}/h$ ratio |
 | Max scale | `adaptive.max_scale` | Ceiling on $h_\text{new}/h$ ratio |
-| Max rejects | `adaptive.max_rejects` | Maximum step rejections before failure |
+| Max rejects | `adaptive.max_rejects` | Maximum rejections of one step on the error estimate before failure |
 | Min dt | `adaptive.min_dt` | Below this, return `StepTooSmall` error |
 | Euler dt | `adaptive.euler_dt` | Below this, fall back to Euler for one step |
 
 !!! warning "Euler Fallback"
-    When the adaptive step size shrinks below `euler_dt`, the embedded solver automatically falls back to a single Euler step to avoid infinite rejection loops near singularities.
+    When the adaptive step size shrinks below `euler_dt`, the embedded solver automatically falls back to a single Euler step to avoid infinite rejection loops near singularities. That step has size `euler_dt`, so `euler_dt` is also the smallest step the solver takes: keep it equal to `min_dt`.
 
 For a detailed treatment of adaptive step-size control theory, see [Adaptive Stepping](../concepts/adaptive-stepping.md).
 

@@ -41,6 +41,8 @@ $$
 
 When the error exceeds the tolerance, the step is **rejected**: the result is discarded, the step size is reduced, and the step is retried.
 
+The error is measured relative to the size of the model. Each component of the estimated position error is divided by the model extent in that direction ($x_{\max} - x_{\min}$, $y_{\max} - y_{\min}$, $z_{\max} - z_{\min}$) before it is compared with the tolerance. A tolerance of $10^{-6}$ therefore allows a position error of about one millionth of the model extent per step, wherever the grid's origin is.
+
 ## Step Size Scaling
 
 After each step (accepted or rejected), a new step size is computed:
@@ -81,7 +83,7 @@ Users can set absolute bounds on the step size via the `adaptive` configuration:
 | Field | Description |
 |-------|-------------|
 | `min_dt` | Smallest allowed time step. If the algorithm needs a step smaller than this, it signals an error. |
-| `euler_dt` | Fixed step size for the Euler solver (which is non-adaptive). |
+| `euler_dt` | Threshold for the adaptive solvers' emergency Euler step. If the step shrinks to `euler_dt` or below, the solver takes a forward-Euler step of `euler_dt`, with no error control. Set it equal to `min_dt` (`1e-10` in these examples): a larger value puts a floor under the step size and degrades accuracy near wells, and a smaller one disables the fallback, so a step that cannot meet the tolerance ends the pathline as `SolverFailed`. The `Euler` solver does not use it. |
 
 The top-level `initial_dt` and `max_dt` fields control the starting step size and upper bound:
 
@@ -97,7 +99,7 @@ The top-level `initial_dt` and `max_dt` fields control the starting step size an
 
 | Solver | Adaptive | Method |
 |--------|----------|--------|
-| `Euler` | No | Fixed step (`euler_dt`) |
+| `Euler` | No | Fixed step (`initial_dt`, capped at `max_dt`) |
 | `Rk4StepDoubling` | Yes | Step doubling (compares full and half steps) |
 | `DormandPrince` | Yes | Embedded pair (4th/5th order) |
 | `CashKarp` | Yes | Embedded pair (4th/5th order) |

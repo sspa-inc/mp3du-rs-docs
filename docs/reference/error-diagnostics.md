@@ -9,7 +9,7 @@ Catalog of known error conditions in mod-PATH3DU. All errors surface as Python `
 
 ## Configuration Errors
 
-Raised during `SimulationConfig.from_json()` or `SimulationConfig.validate()`.
+Raised during `SimulationConfig.from_json()` or `SimulationConfig.validate()`. Both also issue a Python `UserWarning` for settings that are valid but probably not intended, such as an `adaptive.euler_dt` well above `adaptive.min_dt`.
 
 ### Invalid JSON syntax
 
@@ -19,6 +19,15 @@ Raised during `SimulationConfig.from_json()` or `SimulationConfig.validate()`.
 **Cause:** The JSON string passed to `SimulationConfig.from_json()` is not valid JSON (missing commas, unclosed braces, trailing commas, etc.).
 
 **Remedy:** Validate the JSON with a linter or `json.loads()` before passing to `from_json()`.
+
+### Minimum step above maximum step
+
+!!! danger "Error"
+    `adaptive.min_dt must be a number no larger than max_dt`
+
+**Cause:** `adaptive.min_dt` is larger than `max_dt`, or one of them is not a number, so no step size is admissible.
+
+**Remedy:** Set `adaptive.min_dt` well below `max_dt`.
 
 ### Invalid solver name
 
@@ -139,7 +148,7 @@ Raised during `run_simulation()`. Each error includes a machine-readable `code` 
 
 **Cause:** The adaptive step-size controller shrunk the time step below `adaptive.min_dt` (default: $10^{-30}$) without achieving the error tolerance. This typically indicates a stiff region in the velocity field.
 
-**Remedy:** The embedded solvers fall back to Euler when $\Delta t < \texttt{euler\_dt}$. If this error persists, increase `adaptive.tolerance` or check for abrupt velocity changes in the model.
+**Remedy:** Set `adaptive.euler_dt` equal to `adaptive.min_dt`. The adaptive solvers take one Euler step when $\Delta t \le \texttt{euler\_dt}$, so this error can occur only while `euler_dt` is below `min_dt`. If it persists, increase `adaptive.tolerance` or check for abrupt velocity changes in the model. A particle that has reached the edge of the domain does not raise this error; it ends as `ExitedDomain`.
 
 ### Maximum iterations exceeded
 
@@ -150,7 +159,7 @@ Raised during `run_simulation()`. Each error includes a machine-readable `code` 
 **Retryable:** Yes  
 **Action:** `retry_with_dt_scale(0.25)`
 
-**Cause:** The adaptive solver rejected the step `adaptive.max_rejects` times without converging. The error tolerance cannot be met at any step size.
+**Cause:** The adaptive solver rejected the step `adaptive.max_rejects` times without converging. The error tolerance cannot be met at any step size. Rejections caused by a stage point leaving the domain do not count toward the limit.
 
 **Remedy:** Increase `adaptive.max_rejects` or relax `adaptive.tolerance`. Check the velocity field for discontinuities near the particle location.
 

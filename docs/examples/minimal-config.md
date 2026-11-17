@@ -26,14 +26,14 @@ The smallest valid `SimulationConfig` JSON for mod-PATH3DU. Every required field
 
 | Field | Value | Description |
 |-------|-------|-------------|
-| `tolerance` | `1e-6` | Local error tolerance for step acceptance |
+| `tolerance` | `1e-6` | Local error tolerance for step acceptance, as a fraction of the model extent |
 | `safety` | `0.9` | Safety factor applied to predicted optimal step size |
 | `alpha` | `0.2` | PI controller exponent for step-size scaling |
 | `min_scale` | `0.2` | Minimum step-size scale factor (prevents drastic shrinkage) |
 | `max_scale` | `5.0` | Maximum step-size scale factor (prevents drastic growth) |
 | `max_rejects` | `10` | Maximum consecutive rejected steps before error |
 | `min_dt` | `1e-10` | Absolute minimum time step (days) |
-| `euler_dt` | `1.0` | Fixed step size used by the Euler solver |
+| `euler_dt` | `1e-10` | Emergency Euler step for the adaptive solvers; set equal to `min_dt` |
 
 ### Capture (Termination) Parameters
 

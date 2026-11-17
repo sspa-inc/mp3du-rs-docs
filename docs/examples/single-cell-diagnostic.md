@@ -19,9 +19,9 @@ before attempting a full model integration.
 | Item | Value |
 |------|-------|
 | **Status** | `ExitedDomain` |
-| **Steps** | 174 |
+| **Steps** | 180 |
 | **Start** | (0.1000, 5.0000) |
-| **End** | (9.9998, 9.9498) |
+| **End** | (10.0000, 9.9500) |
 
 The particle enters through the left face (green arrow, Q = 1.0 m³/d IN),
 flows right and upward following the velocity field, and exits the domain
@@ -199,7 +199,7 @@ config = mp3du.SimulationConfig.from_json(json.dumps({
     "adaptive": {
         "tolerance": 1e-6, "safety": 0.9, "alpha": 0.2,
         "min_scale": 0.2, "max_scale": 5.0, "max_rejects": 10,
-        "min_dt": 1e-10, "euler_dt": 0.1,
+        "min_dt": 1e-10, "euler_dt": 1e-10,
     },
     "dispersion": {"method": "None"},
     "capture": {
@@ -237,8 +237,8 @@ approximates head contours via Darcy's law, and draws the trajectory.  See the
 | **Labelled arrows** | Face flows — green = inflow, red = outflow, with magnitude |
 | **Blue contours** | Approximate head field derived from the fitted velocities |
 | **Grey quiver arrows** | Waterloo interpolated velocity field (unit vectors, 30 × 30) |
-| **Orange line** | Particle trajectory (174 steps, Dormand–Prince adaptive solver) |
-| **Green / red dots** | Start (0.1000, 5.0000) and end (9.9998, 9.9498) positions |
+| **Orange line** | Particle trajectory (180 steps, Dormand–Prince adaptive solver) |
+| **Green / red dots** | Start (0.1000, 5.0000) and end (10.0000, 9.9500) positions |
 
 ## Key Conventions Demonstrated
 

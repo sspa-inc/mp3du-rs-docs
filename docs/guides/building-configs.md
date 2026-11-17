@@ -38,7 +38,7 @@ See the [Schema Reference](../reference/schema-reference.md) for the complete co
         "max_scale": 5.0,
         "max_rejects": 10,
         "min_dt": 1e-10,
-        "euler_dt": 0.1
+        "euler_dt": 1e-10
       },
       "dispersion": {
         "method": "None"
@@ -72,7 +72,7 @@ See the [Schema Reference](../reference/schema-reference.md) for the complete co
         "max_scale": 5.0,
         "max_rejects": 20,
         "min_dt": 1e-12,
-        "euler_dt": 0.01
+        "euler_dt": 1e-12
       },
       "dispersion": {
         "method": "Gsde",
@@ -133,18 +133,18 @@ See [Solver Methods](../reference/solver-methods.md) for mathematical details.
   "max_scale": 5.0,        // (5)!
   "max_rejects": 10,       // (6)!
   "min_dt": 1e-10,         // (7)!
-  "euler_dt": 0.1          // (8)!
+  "euler_dt": 1e-10        // (8)!
 }
 ```
 
-1. **tolerance** — Error threshold for step acceptance. Smaller = more accurate, slower.
+1. **tolerance** — Error threshold for step acceptance, as a fraction of the model extent. Smaller = more accurate, slower.
 2. **safety** — Multiplier applied to the optimal step size (typically 0.8–0.95). Prevents frequent rejections.
 3. **alpha** — Exponent in the step-scaling formula. For a 5th-order pair, use 0.2.
 4. **min_scale** — Minimum step-size reduction factor. Step can shrink to at most `min_scale × h`.
 5. **max_scale** — Maximum step-size growth factor. Step can grow to at most `max_scale × h`.
 6. **max_rejects** — Maximum consecutive rejected steps before the solver gives up.
 7. **min_dt** — Absolute minimum time step. If the solver needs smaller, it raises an error.
-8. **euler_dt** — Fixed step size used only by the Euler solver.
+8. **euler_dt** — Threshold for the adaptive solvers' emergency Euler step: a step of this size or smaller is taken as one forward-Euler step, with no error control. Set it equal to `min_dt`; a larger value puts a floor under the step size. The `Euler` solver does not use it; it steps at `initial_dt`.
 
 See [Adaptive Stepping](../concepts/adaptive-stepping.md) for the mathematical background.
 
@@ -199,7 +199,7 @@ See [Dispersion Theory](../concepts/dispersion-theory.md) for the mathematical f
 }
 ```
 
-1. **max_time** — Maximum simulation time. Particle tracking stops after this many time units.
+1. **max_time** — Maximum simulation time. The last step is shortened so that tracking stops at exactly this time.
 2. **max_steps** — Maximum number of integration steps per particle.
 3. **stagnation_velocity** — If the velocity magnitude falls below this threshold, the particle is considered stagnant.
 4. **stagnation_limit** — Number of consecutive stagnant steps before the particle is terminated.
@@ -264,7 +264,7 @@ config_dict = {
         "max_scale": 5.0,
         "max_rejects": 10,
         "min_dt": 1e-10,
-        "euler_dt": 0.1,
+        "euler_dt": 1e-10,
     },
     "dispersion": {"method": "None"},
     "capture": {
@@ -283,13 +283,19 @@ You can also validate after constructing a `SimulationConfig`:
 
 ```python
 config = mp3du.SimulationConfig.from_json(json.dumps(config_dict))
-config.validate()  # raises if invalid
+config.validate()  # raises ValueError if invalid; may issue a UserWarning
 ```
 
 ## Common Mistakes
 
 !!! warning "Direction must be exactly `1.0` or `-1.0`"
     The schema uses an **enum** constraint, not a range. Integer values like `1` or `-1` are rejected. Fractional values like `0.5` are rejected. Use exactly `1.0` (forward) or `-1.0` (backward).
+
+!!! warning "`euler_dt` is not a step size"
+    In the adaptive solvers `adaptive.euler_dt` is the threshold of the emergency Euler step, which makes it a floor on the step size. Set it equal to `adaptive.min_dt`. A value such as `1.0` or `0.1` forces first-order Euler steps of that size wherever the solver needs smaller ones, typically near wells. `from_json()` and `validate()` issue a `UserWarning` for it.
+
+!!! warning "`min_dt` must not exceed `max_dt`"
+    A configuration with `adaptive.min_dt` above `max_dt` leaves no admissible step size and is rejected with a `ValueError`.
 
 !!! warning "Solver names are case-sensitive"
     `"dormandprince"` and `"dormand_prince"` are invalid. Use the exact enum values: `Euler`, `Rk4StepDoubling`, `DormandPrince`, `CashKarp`, `VernerRobust`, `VernerEfficient`.

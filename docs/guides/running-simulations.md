@@ -202,7 +202,7 @@ config_dict = {
         "max_scale": 5.0,
         "max_rejects": 10,
         "min_dt": 1e-10,
-        "euler_dt": 0.1,
+        "euler_dt": 1e-10,
     },
     "dispersion": {"method": "None"},
     "capture": {
@@ -316,7 +316,7 @@ Each record dictionary from `to_records()` contains:
 | `x`, `y`, `z` | float | Particle position |
 | `vx`, `vy`, `vz` | float | Velocity components at position |
 | `cell_id` | int | Cell containing the particle |
-| `dt` | float | Time step used |
+| `dt` | float | Size of the time step taken to reach this record (0 at the release point) |
 
 ### Final Status Values
 
@@ -325,11 +325,10 @@ Each record dictionary from `to_records()` contains:
 | `CapturedByWell` | Particle reached a well (IFACE 0) within capture radius |
 | `CapturedByBoundary` | Particle terminated by an IFACE 2/5/6/7 boundary condition |
 | `CapturedAtModelEdge` | Particle reached a domain-edge cell (`is_domain_boundary = True`) |
-| `Exited` | Particle left the grid domain |
-| `MaxTime` | `capture.max_time` was reached |
-| `MaxSteps` | `capture.max_steps` was reached |
+| `ExitedDomain` | Particle left the grid domain, or reached its edge with the flow still pointing outward |
+| `TimeLimitReached` | `capture.max_time` was reached (tracking stops at exactly that time), or `capture.max_steps` was reached; `termination_reason` says which |
 | `Stagnated` | Velocity below `stagnation_velocity` for `stagnation_limit` consecutive steps |
-| `Error` | A solver error occurred (check error diagnostics) |
+| `SolverFailed` | A solver error occurred (check error diagnostics) |
 
 !!! info "termination_reason"
     For `CapturedByWell` and `CapturedByBoundary`, `termination_reason`
@@ -343,6 +342,6 @@ Simulation errors are reported via the `final_status` field or raised as Python 
 
 - **Invalid configuration** — raised by `SimulationConfig.from_json()` or `validate()`
 - **Array shape mismatch** — raised by `hydrate_*` functions when array lengths don't match
-- **Solver failure** — reported as `final_status = "Error"` in the trajectory result
+- **Solver failure** — reported as `final_status = "SolverFailed"` in the trajectory result
 
 See [Error Diagnostics](../reference/error-diagnostics.md) for the full error catalog and [Troubleshooting](troubleshooting.md) for common problems and solutions.

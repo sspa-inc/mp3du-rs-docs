@@ -48,7 +48,7 @@
         "tolerance": {
           "type": "number",
           "exclusiveMinimum": 0,
-          "description": "Local truncation error threshold for step acceptance. The solver compares its embedded-pair error estimate against this value; steps with error ≤ tolerance are accepted. Smaller values produce more accurate trajectories but require more (smaller) steps. Typical starting value: 1e-6."
+          "description": "Local truncation error threshold for step acceptance. The solver compares its embedded-pair error estimate against this value; steps with error ≤ tolerance are accepted. The error is measured as a fraction of the model extent in each direction. Smaller values produce more accurate trajectories but require more (smaller) steps. Typical starting value: 1e-6."
         },
         "safety": {
           "type": "number",
@@ -78,12 +78,12 @@
         "min_dt": {
           "type": "number",
           "exclusiveMinimum": 0,
-          "description": "Absolute minimum time step in model time units. If the adaptive algorithm needs a step smaller than this, the particle terminates with an error. Set small enough to handle tight regions but large enough to prevent the solver from stalling indefinitely. Typical value: 1e-10."
+          "description": "Absolute minimum time step in model time units. If the adaptive algorithm needs a step smaller than this, the particle terminates with an error, unless adaptive.euler_dt is at least this large; one Euler step of that size is then taken instead. Set small enough to handle tight regions but large enough to prevent the solver from stalling indefinitely. Typical value: 1e-10."
         },
         "euler_dt": {
           "type": "number",
           "exclusiveMinimum": 0,
-          "description": "Fixed time step used exclusively by the Euler solver (which is non-adaptive). Ignored by all other solvers. In model time units."
+          "description": "Threshold of the adaptive solvers' emergency Euler step. If the step size shrinks to this value or below, the solver takes a forward-Euler step of this size, with no error control, so it acts as a floor on the step size. Set it equal to min_dt. The Euler solver does not use it; it steps at initial_dt. In model time units."
         }
       },
       "additionalProperties": false
@@ -139,7 +139,7 @@
         "max_time": {
           "type": "number",
           "exclusiveMinimum": 0,
-          "description": "Maximum cumulative tracking time for one particle, in the model's time units (for example days or seconds). The particle terminates once its accumulated travel time reaches or exceeds this value."
+          "description": "Maximum cumulative tracking time for one particle, in the model's time units (for example days or seconds). The last step is shortened so that tracking stops when the accumulated travel time reaches this value."
         },
         "max_steps": {
           "type": "integer",
@@ -173,7 +173,7 @@
     "initial_dt": {
       "type": "number",
       "exclusiveMinimum": 0,
-      "description": "Starting time step for the first integration step of each particle, in model time units. The adaptive solver will adjust this after the first step. For the Euler solver this is overridden by adaptive.euler_dt."
+      "description": "Starting time step for the first integration step of each particle, in model time units. The adaptive solver will adjust this after the first step. The Euler solver uses it as its fixed step, capped at max_dt."
     },
     "max_dt": {
       "type": "number",

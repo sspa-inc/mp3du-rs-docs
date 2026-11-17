@@ -57,11 +57,10 @@ for res in results:
 |---|---|---|
 | `CapturedByWell` | Particle reached a well within `capture_radius` | Expected for particles near pumping wells. |
 | `CapturedAtModelEdge` | Particle hit a domain-boundary cell | Check if the boundary is realistic or if the grid is too small. |
-| `Exited` | Particle left the grid entirely | Usually means the particle reached the edge of the model domain. |
-| `MaxTime` | `capture.max_time` was reached | Increase `max_time` if particles haven't reached their destination. |
-| `MaxSteps` | `capture.max_steps` was reached | Increase `max_steps`, or loosen `tolerance` to allow larger steps. |
+| `ExitedDomain` | Particle left the grid, or reached its edge with the flow pointing outward | Usually means the particle reached the edge of the model domain. |
+| `TimeLimitReached` | `capture.max_time` or `capture.max_steps` was reached; `termination_reason` says which | Increase `max_time` if particles haven't reached their destination. For the step limit, increase `max_steps`, or loosen `tolerance` to allow larger steps. |
 | `Stagnated` | Velocity stayed below `stagnation_velocity` for `stagnation_limit` consecutive steps | Check for zero-head-gradient cells or dry cells in the head map. |
-| `Error` | Solver failure (e.g. `max_rejects` exceeded) | See [Troubleshooting](troubleshooting.md). |
+| `SolverFailed` | Solver failure (e.g. `max_rejects` exceeded) | See [Troubleshooting](troubleshooting.md). |
 
 ### 8. Visualise and Export
 
@@ -98,7 +97,7 @@ plt.show()
 !!! tip "Sanity checks"
     - Pathlines should follow the head gradient (high → low for forward tracking).
     - Particles near wells should curve toward the well and terminate there.
-    - If all particles show `MaxSteps` or `Stagnated`, the head field may be too flat or the fitting may have failed — check the head map for artefacts.
+    - If all particles hit the step limit (`TimeLimitReached`) or show `Stagnated`, the head field may be too flat or the fitting may have failed — check the head map for artefacts.
 
 ## Common Mistakes
 
@@ -130,14 +129,14 @@ The SSP&A fitting process uses kriging, which has an O(n²) computational cost. 
 
 A common experience when first running the MEUK/SSP&A workflow is that `fit_sspa()` completes (possibly after a long wait), `run_simulation()` returns results, but the output seems wrong — all particles stagnate, exit immediately, or produce nonsensical paths. Here is a diagnostic checklist:
 
-### All particles show `MaxSteps` or `Stagnated`
+### All particles hit the step limit or show `Stagnated`
 
 1. **Head gradient is too flat.** If the head difference across the model is tiny relative to the cell size, velocities will be near-zero. Check `np.ptp(heads)` — if it's < 0.01 m across the domain, the gradient may be below numerical noise.
 2. **Hydraulic conductivity is zero or very small.** Velocity = K × gradient / porosity. If K is orders of magnitude too small, particles won't move.
 3. **`max_time` is too short.** For regional models with slow flow, particles may need millions of days. Check the expected travel time: `distance / (K * gradient / porosity)`.
 4. **`stagnation_velocity` is too high.** If set to e.g. `1e-6` but actual velocities are `1e-8`, every step will count as stagnant. Lower it to `1e-14` or `0.0` to disable stagnation detection while debugging.
 
-### All particles show `Exited` immediately
+### All particles show `ExitedDomain` immediately
 
 1. **Starting coordinates are outside the grid.** Verify that each `ParticleStart(x, y)` falls inside the polygon of `cell_id`. Use a point-in-polygon check.
 2. **`cell_id` is wrong.** Cell IDs are 0-based. If your particle-start file uses 1-based IDs, subtract 1.

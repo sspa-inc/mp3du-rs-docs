@@ -97,7 +97,7 @@ See [Schema Reference](../reference/schema-reference.md) for field specification
 
 ### Particle outside grid
 
-**Error pattern:** `particle exited domain at step N` or `final_status = "Exited"`
+**Error pattern:** `particle exited domain at step N` or `final_status = "ExitedDomain"`
 
 **Cause:** The particle's starting coordinates are outside the specified cell, or the particle naturally exits the model domain during tracking.
 
@@ -118,7 +118,7 @@ See [Schema Reference](../reference/schema-reference.md) for field specification
 
 1. Start with the default tolerance (`1e-6`) and DormandPrince solver
 2. Check for cells with near-zero velocity — these may indicate dry cells or data issues
-3. Set `min_dt` to a reasonable floor (e.g., `1e-10`) to prevent the solver from stalling
+3. Set `min_dt` to a reasonable floor (e.g., `1e-10`) to prevent the solver from stalling, and set `euler_dt` equal to it
 4. Enable stagnation detection with `stagnation_velocity` and `stagnation_limit`
 
 !!! tip
@@ -126,7 +126,7 @@ See [Schema Reference](../reference/schema-reference.md) for field specification
 
 ### `max_rejects exceeded`
 
-**Error pattern:** `final_status = "Error"` with step size rejection
+**Error pattern:** `final_status = "SolverFailed"` with step size rejection
 
 **Cause:** The solver cannot find a step size that satisfies the tolerance. This usually happens in regions with discontinuous or extremely steep velocity gradients.
 

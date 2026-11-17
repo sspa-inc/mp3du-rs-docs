@@ -407,7 +407,7 @@ The `cell_id` must correspond to a valid cell index in the grid. The particle's 
 | `z` | float | **Local vertical coordinate in [0, 1]** (NOT physical elevation) |
 | `vx`, `vy`, `vz` | float | Velocity components at this position |
 | `cell_id` | int | Cell containing the particle at this step |
-| `dt` | float | Time step size used for this step |
+| `dt` | float | Size of the time step taken to reach this record (0 at the release point) |
 
 !!! info "Converting output z to physical elevation"
     ```python
@@ -421,11 +421,10 @@ The `final_status` field on `TrajectoryResult` is a string describing why tracki
 | `CapturedByWell` | Particle reached a well (IFACE 0) within capture radius |
 | `CapturedByBoundary` | Particle terminated by an IFACE 2/5/6/7 boundary condition |
 | `CapturedAtModelEdge` | Particle reached a domain-edge cell (`is_domain_boundary = True`) |
-| `Exited` | Particle left the grid domain |
-| `MaxTime` | `capture.max_time` was reached |
-| `MaxSteps` | `capture.max_steps` was reached |
+| `ExitedDomain` | Particle left the grid domain, or reached its edge with the flow still pointing outward |
+| `TimeLimitReached` | `capture.max_time` was reached (tracking stops at exactly that time), or `capture.max_steps` was reached; `termination_reason` says which |
 | `Stagnated` | Velocity below threshold for N consecutive steps |
-| `Error` | A solver error occurred |
+| `SolverFailed` | A solver error occurred |
 
 The `termination_reason` field provides additional detail for capture events.
 For boundary captures it includes the BC type name, e.g.,

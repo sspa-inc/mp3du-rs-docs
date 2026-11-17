@@ -126,7 +126,7 @@ config_dict = {
         "max_scale": 5.0,
         "max_rejects": 10,
         "min_dt": 1e-10,
-        "euler_dt": 0.1,
+        "euler_dt": 1e-10,
     },
     "dispersion": {"method": "None"},
     "capture": {

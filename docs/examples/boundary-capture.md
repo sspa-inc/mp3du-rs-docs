@@ -151,7 +151,7 @@ config_dict = {
     "adaptive": {
         "tolerance": 1e-6, "safety": 0.9, "alpha": 0.2,
         "min_scale": 0.2, "max_scale": 5.0, "max_rejects": 10,
-        "min_dt": 1e-10, "euler_dt": 0.1,
+        "min_dt": 1e-10, "euler_dt": 1e-10,
     },
     "dispersion": {"method": "None"},
     "capture": {

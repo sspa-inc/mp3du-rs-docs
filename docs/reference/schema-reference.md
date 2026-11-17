@@ -26,7 +26,7 @@ Configuration contract for `SimulationConfig`. Generated from `mp3du-rs/python/m
 | `dispersion` | object (`"None"` \| `"Gsde"` \| `"Ito"`) | Yes | — | — | Dispersion model configuration. Choose `None` for pure advection, `Gsde` for the generalised stochastic differential equation method, or `Ito` for the Itô-calculus formulation. When dispersion is enabled, each particle run is stochastic — run multiple realisations (Monte Carlo) to build concentration fields. |
 | `retardation_enabled` | boolean | Yes | — | — | When true, the solver multiplies each cell's velocity by 1/R where R is the retardation factor from the cell properties. Requires that retardation factors were provided during hydration. Set to false for conservative (non-sorbing) transport. |
 | `capture` | object | Yes | — | — | — |
-| `initial_dt` | number | Yes | — | > 0 | Starting time step for the first integration step of each particle, in model time units. The adaptive solver will adjust this after the first step. For the Euler solver this is overridden by adaptive.euler_dt. |
+| `initial_dt` | number | Yes | — | > 0 | Starting time step for the first integration step of each particle, in model time units. The adaptive solver will adjust this after the first step. The Euler solver uses it as its fixed step, capped at max_dt. |
 | `max_dt` | number | Yes | — | > 0 | Upper bound on the time step in model time units. The adaptive solver will never grow dt beyond this value, even if the error estimate would allow it. Prevents particles from jumping over cells in smooth regions. |
 | `direction` | number | Yes | — | one of: `1.0`, `-1.0` | Tracking direction. Use 1.0 for forward tracking (particles move downgradient / in the direction of flow) or -1.0 for backward tracking (particles move upgradient / against the flow direction). Must be exactly 1.0 or -1.0 — integer values (1, -1) are rejected by the schema. |
 
@@ -34,20 +34,20 @@ Configuration contract for `SimulationConfig`. Generated from `mp3du-rs/python/m
 
 | Property | Type | Required | Default | Constraints | Description |
 |----------|------|----------|---------|-------------|-------------|
-| `tolerance` | number | Yes | — | > 0 | Local truncation error threshold for step acceptance. The solver compares its embedded-pair error estimate against this value; steps with error ≤ tolerance are accepted. Smaller values produce more accurate trajectories but require more (smaller) steps. Typical starting value: 1e-6. |
+| `tolerance` | number | Yes | — | > 0 | Local truncation error threshold for step acceptance. The solver compares its embedded-pair error estimate against this value; steps with error ≤ tolerance are accepted. The error is measured as a fraction of the model extent in each direction. Smaller values produce more accurate trajectories but require more (smaller) steps. Typical starting value: 1e-6. |
 | `safety` | number | Yes | — | > 0 | Safety factor (S) applied when computing the next step size: h_new = h × S × (tol/err)^alpha. Values < 1 (typically 0.8–0.95) make step-size growth conservative, reducing the chance of immediate rejection on the next step. Recommended: 0.9. |
 | `alpha` | number | Yes | — | > 0 | Exponent in the step-scaling formula h_new = h × S × (tol/err)^alpha. Derived from the solver order: for a method of order p, the optimal value is 1/(p+1). Use 0.2 for 4th/5th-order pairs (DormandPrince, CashKarp) and ~0.125 for 6th/7th-order pairs (Verner). |
 | `min_scale` | number | Yes | — | > 0 | Minimum allowed step-size scaling factor. After a rejected step the new dt cannot shrink below min_scale × current dt. Prevents pathological collapse of the step size. Typical value: 0.2 (step can shrink to at most 1/5th). |
 | `max_scale` | number | Yes | — | > 0 | Maximum allowed step-size scaling factor. After an accepted step the new dt cannot grow beyond max_scale × current dt. Prevents overshooting into a region where the step would be rejected. Typical value: 5.0. |
 | `max_rejects` | integer | Yes | — | ≥ 0 | Maximum number of consecutive rejected steps before the solver terminates the particle with an error. Increase this (e.g. to 50) if particles encounter sharp velocity gradients that need many successive reductions. Default recommendation: 10. |
-| `min_dt` | number | Yes | — | > 0 | Absolute minimum time step in model time units. If the adaptive algorithm needs a step smaller than this, the particle terminates with an error. Set small enough to handle tight regions but large enough to prevent the solver from stalling indefinitely. Typical value: 1e-10. |
-| `euler_dt` | number | Yes | — | > 0 | Fixed time step used exclusively by the Euler solver (which is non-adaptive). Ignored by all other solvers. In model time units. |
+| `min_dt` | number | Yes | — | > 0 | Absolute minimum time step in model time units. If the adaptive algorithm needs a step smaller than this, the particle terminates with an error, unless adaptive.euler_dt is at least this large; one Euler step of that size is then taken instead. Set small enough to handle tight regions but large enough to prevent the solver from stalling indefinitely. Typical value: 1e-10. |
+| `euler_dt` | number | Yes | — | > 0 | Threshold of the adaptive solvers' emergency Euler step. If the step size shrinks to this value or below, the solver takes a forward-Euler step of this size, with no error control, so it acts as a floor on the step size. Set it equal to min_dt. The Euler solver does not use it; it steps at initial_dt. In model time units. |
 
 ### capture
 
 | Property | Type | Required | Default | Constraints | Description |
 |----------|------|----------|---------|-------------|-------------|
-| `max_time` | number | Yes | — | > 0 | Maximum cumulative tracking time for one particle, in the model's time units (for example days or seconds). The particle terminates once its accumulated travel time reaches or exceeds this value. |
+| `max_time` | number | Yes | — | > 0 | Maximum cumulative tracking time for one particle, in the model's time units (for example days or seconds). The last step is shortened so that tracking stops when the accumulated travel time reaches this value. |
 | `max_steps` | integer | Yes | — | ≥ 1 | Maximum number of accepted integration steps for one particle. This is unitless and acts as a safety cap on solver work even if the particle has not yet been captured or reached max_time. |
 | `stagnation_velocity` | number | Yes | — | ≥ 0 | Velocity-magnitude threshold used for stagnation detection, in model length per model time (for example m/day or ft/s). A step is counted as stagnant when the particle velocity magnitude is below this value. |
 | `stagnation_limit` | integer | Yes | — | ≥ 1 | Number of consecutive stagnant accepted steps required before termination. If velocity rises back above stagnation_velocity, the stagnation counter resets to zero. |
@@ -63,7 +63,7 @@ Capture/termination checks are evaluated in a priority order. A particle stops a
 3. **Internal sink/source capture** — IFACE-based internal boundaries capture immediately on cell entry when the boundary flow direction is consistent with the tracking direction.
 4. **Top/bottom face capture** — top-face and bottom-face boundaries only capture when the particle is sufficiently close to that face; `face_epsilon` controls this proximity test.
 5. **Water-table top-face termination** — in forward tracking, a top-face water-table condition can terminate a particle even when no explicit top-face BC name is present.
-6. **Time limit** — `max_time` is compared against the particle's accumulated travel time in model time units; termination occurs when particle time reaches or exceeds that value.
+6. **Time limit** — `max_time` is compared against the particle's accumulated travel time in model time units; each step is limited to the time that is left, so the particle stops at that value.
 7. **Step limit** — `max_steps` counts accepted integration steps, not physical distance or elapsed wall-clock time.
 8. **Stagnation** — after each accepted step, if velocity magnitude is below `stagnation_velocity`, the consecutive stagnation counter increments; otherwise it resets to zero. The particle terminates once that counter reaches `stagnation_limit`.
 
@@ -151,7 +151,7 @@ The `dispersion` property uses one of the following variant schemas:
             "tolerance": {
               "type": "number",
               "exclusiveMinimum": 0,
-              "description": "Local truncation error threshold for step acceptance. The solver compares its embedded-pair error estimate against this value; steps with error \u2264 tolerance are accepted. Smaller values produce more accurate trajectories but require more (smaller) steps. Typical starting value: 1e-6."
+              "description": "Local truncation error threshold for step acceptance. The solver compares its embedded-pair error estimate against this value; steps with error \u2264 tolerance are accepted. The error is measured as a fraction of the model extent in each direction. Smaller values produce more accurate trajectories but require more (smaller) steps. Typical starting value: 1e-6."
             },
             "safety": {
               "type": "number",
@@ -181,12 +181,12 @@ The `dispersion` property uses one of the following variant schemas:
             "min_dt": {
               "type": "number",
               "exclusiveMinimum": 0,
-              "description": "Absolute minimum time step in model time units. If the adaptive algorithm needs a step smaller than this, the particle terminates with an error. Set small enough to handle tight regions but large enough to prevent the solver from stalling indefinitely. Typical value: 1e-10."
+              "description": "Absolute minimum time step in model time units. If the adaptive algorithm needs a step smaller than this, the particle terminates with an error, unless adaptive.euler_dt is at least this large; one Euler step of that size is then taken instead. Set small enough to handle tight regions but large enough to prevent the solver from stalling indefinitely. Typical value: 1e-10."
             },
             "euler_dt": {
               "type": "number",
               "exclusiveMinimum": 0,
-              "description": "Fixed time step used exclusively by the Euler solver (which is non-adaptive). Ignored by all other solvers. In model time units."
+              "description": "Threshold of the adaptive solvers' emergency Euler step. If the step size shrinks to this value or below, the solver takes a forward-Euler step of this size, with no error control, so it acts as a floor on the step size. Set it equal to min_dt. The Euler solver does not use it; it steps at initial_dt. In model time units."
             }
           },
           "additionalProperties": false
@@ -287,7 +287,7 @@ The `dispersion` property uses one of the following variant schemas:
             "max_time": {
               "type": "number",
               "exclusiveMinimum": 0,
-              "description": "Maximum cumulative tracking time for one particle, in the model's time units (for example days or seconds). The particle terminates once its accumulated travel time reaches or exceeds this value."
+              "description": "Maximum cumulative tracking time for one particle, in the model's time units (for example days or seconds). The last step is shortened so that tracking stops when the accumulated travel time reaches this value."
             },
             "max_steps": {
               "type": "integer",
@@ -321,7 +321,7 @@ The `dispersion` property uses one of the following variant schemas:
         "initial_dt": {
           "type": "number",
           "exclusiveMinimum": 0,
-          "description": "Starting time step for the first integration step of each particle, in model time units. The adaptive solver will adjust this after the first step. For the Euler solver this is overridden by adaptive.euler_dt."
+          "description": "Starting time step for the first integration step of each particle, in model time units. The adaptive solver will adjust this after the first step. The Euler solver uses it as its fixed step, capped at max_dt."
         },
         "max_dt": {
           "type": "number",

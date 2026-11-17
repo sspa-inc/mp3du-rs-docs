@@ -83,7 +83,7 @@ config = mp3du.SimulationConfig.from_json(json.dumps({
         "max_scale": 5.0,
         "max_rejects": 10,
         "min_dt": 1e-10,
-        "euler_dt": 1.0
+        "euler_dt": 1e-10
     },
     "dispersion": {"method": "None"},
     "retardation_enabled": False,

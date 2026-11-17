@@ -169,13 +169,12 @@ for status, count in status_counts.most_common():
 |---|---|---|
 | `CapturedByWell` | Reached a well within `capture_radius` | ✅ Expected near pumping wells |
 | `CapturedAtModelEdge` | Hit a domain-boundary cell | Check if the boundary is realistic |
-| `Exited` | Left the grid entirely | Normal at model edges; unexpected in the interior |
-| `MaxTime` | Ran out of simulation time | Increase `capture.max_time` |
-| `MaxSteps` | Ran out of integration steps | Increase `capture.max_steps` or loosen `adaptive.tolerance` |
+| `ExitedDomain` | Left the grid, or reached its edge with the flow pointing outward | Normal at model edges; unexpected in the interior |
+| `TimeLimitReached` | Ran out of simulation time or integration steps; `termination_reason` says which | Increase `capture.max_time`; for the step limit, increase `capture.max_steps` or loosen `adaptive.tolerance` |
 | `Stagnated` | Velocity too low for too long | Lower `stagnation_velocity` or check head field |
-| `Error` | Solver failure | See [Troubleshooting](../guides/troubleshooting.md) |
+| `SolverFailed` | Solver failure | See [Troubleshooting](../guides/troubleshooting.md) |
 
-!!! warning "If most particles show `MaxSteps` or `Stagnated`"
+!!! warning "If most particles hit the step limit or show `Stagnated`"
     This usually means the velocity field is near-zero everywhere. Check:
 
     1. `np.ptp(heads)` — is the head range realistic? A flat head field produces no flow.
@@ -220,7 +219,7 @@ Pathlines should follow the head gradient (high → low for forward tracking) an
 
 See the [SSP&A Workflow — Diagnosing Silent Failures](../guides/sspa-workflow.md#diagnosing-silent-failures) section for a comprehensive checklist covering:
 
-- All particles stagnating or hitting `MaxSteps`
+- All particles stagnating or hitting the step limit
 - Particles exiting immediately
 - `fit_sspa()` producing wrong velocities
 - Particles curving the wrong direction

@@ -25,14 +25,14 @@ A fully-specified `SimulationConfig` JSON exercising all available options, incl
 
 | Field | Value | Description |
 |-------|-------|-------------|
-| `tolerance` | `1e-6` | Local error tolerance for step acceptance |
+| `tolerance` | `1e-6` | Local error tolerance for step acceptance, as a fraction of the model extent |
 | `safety` | `0.9` | Safety factor for step-size prediction |
 | `alpha` | `0.2` | PI controller exponent |
 | `min_scale` | `0.2` | Minimum step-size scale factor |
 | `max_scale` | `5.0` | Maximum step-size scale factor |
 | `max_rejects` | `10` | Maximum consecutive rejected steps |
 | `min_dt` | `1e-10` | Absolute minimum time step (days) |
-| `euler_dt` | `1.0` | Fixed step size for Euler solver |
+| `euler_dt` | `1e-10` | Emergency Euler step for the adaptive solvers; set equal to `min_dt` |
 
 ### Dispersion
 

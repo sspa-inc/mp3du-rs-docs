@@ -51,11 +51,16 @@ Each BC flow is routed to **exactly one** bucket (no double counting).
 
 q_vert Note
 -----------
-The ``q_vert`` array passed to ``hydrate_waterloo_inputs()`` must contain
-**cell-to-cell vertical flow only** — it must NOT include BC contributions
-from IFACE 5/6/7.  The BC contributions to ``q_top``/``q_bot`` are used
-only by the evaluation context (Pollock vertical velocity interpolation),
-not by the fitting correction term.
+The ``q_vert`` array passed to ``hydrate_cell_flows()`` and
+``hydrate_waterloo_inputs()`` contains the vertical flow through the top
+and bottom faces, cell-to-cell **and** the BC contributions from IFACE
+5/6/7, but not storage, as mod-PATH3DU's
+``qvert = (qtop - qbot) + (qtopface - qbotface) - qsto``.  For a cell whose
+budget closes, ``q_vert = sum(face_flow) + q_well + q_other + q_storage``
+(``face_flow`` positive into the cell, the rest in raw MODFLOW sign).
+Storage goes in ``q_storage``; ``fit_waterloo()`` subtracts it (since 0.1.2).
+Before 0.1.2 this note said BC contributions must not be included in
+``q_vert``; that disagreed with mod-PATH3DU.
 """
 
 from __future__ import annotations

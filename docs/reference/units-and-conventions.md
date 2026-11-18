@@ -96,6 +96,25 @@ once to positive = INTO, then pass the result to both.
 | `q_top` positive | Flow entering through the top face (from above) | |
 | `q_bot` positive | Flow entering through the bottom face (from below) | |
 | `q_well` (everywhere) | **negative** = pumping (extraction), positive = injection | Raw MODFLOW sign — **never negate** |
+| `q_storage` | **positive** = water released from storage into the cell | Raw MODFLOW sign — **never negate**. MODFLOW 6: `STO-SS + STO-SY`; MODFLOW-2005 / USG: `STORAGE`; zeros for steady state |
+| `q_vert` | net vertical flow through the top and bottom faces (cell-to-cell **and** boundary flows), **without** storage | `fit_waterloo()` subtracts `q_storage` from it. See [IFACE Flow Routing](iface-flow-routing.md#q_vert-consistency-audit-results) |
+
+!!! info "Storage (since 0.1.2)"
+    `fit_waterloo()` uses `q_vert - q_storage` as the vertical term of the
+    Waterloo method, in both the fit and the velocity evaluation, as
+    mod-PATH3DU 2.1.9 does (`qvert = (qtop - qbot) + (qtopface - qbotface) - qsto`).
+    Storage acts as a source or sink spread evenly over the cell. Pass the
+    storage flow in `q_storage` exactly as MODFLOW reports it, per cell and in
+    volume per time (L³/T); for MODFLOW 6 that is `STO-SS + STO-SY` from the
+    budget file, or `GWF/STO/STRGSS + GWF/STO/STRGSY` through the API.
+    Do **not** also add storage to `q_vert`: that counts it twice.
+
+    For a cell whose budget closes, `q_vert - q_storage` equals
+    `sum(face_flow) + q_well + q_other` for that cell, which is a useful check.
+
+    In 0.1.0 and 0.1.1 `q_storage` was accepted but not used. Scripts written
+    for those versions that folded storage into `q_vert` should either keep
+    doing so and pass `q_storage` as zeros, or move storage to `q_storage`.
 
 ### Sign Conversion by MODFLOW Version
 

@@ -136,8 +136,9 @@ class TrajectoryResult:
     def to_records(self) -> List[Dict[str, Any]]:
         """Convert the trajectory to a list of per-step record dicts.
 
-        Each record contains the keys ``t``, ``x``, ``y``, ``z``,
-        ``cell_id``, and ``dt``.  The list can be passed directly to
+        Each record contains the keys ``step``, ``time``, ``x``, ``y``,
+        ``z``, ``vx``, ``vy``, ``vz``, ``cell_id`` and ``dt``.  The list
+        can be passed directly to
         ``pandas.DataFrame(result.to_records())``.
 
         Returns:
@@ -370,7 +371,9 @@ class CellFlows:
 
     @property
     def q_vert(self) -> List[float]:
-        """Net vertical flow term (L³/T, raw MODFLOW sign)."""
+        """Net vertical flow term without storage (L³/T): minus the net inflow
+        through the cell's top and bottom faces, cell-to-cell and boundary
+        flows alike (mod-PATH3DU's ``(qtop - qbot) + (qtopface - qbotface)``)."""
         ...
 
     @property
@@ -385,7 +388,10 @@ class CellFlows:
 
     @property
     def q_storage(self) -> List[float]:
-        """Storage term (L³/T, positive = release from storage)."""
+        """Storage flow (L³/T, MODFLOW's sign: positive = water released from
+        storage into the cell). For MODFLOW 6 the sum of ``STO-SS`` and
+        ``STO-SY``; zeros for steady state. `fit_waterloo()` subtracts it
+        from ``q_vert`` (since 0.1.2)."""
         ...
 
     @property
@@ -506,6 +512,24 @@ def hydrate_cell_flows(
     and ``hydrate_waterloo_inputs()``.  No per-function negation needed.
 
     Never negate ``q_well``.
+
+    Vertical flow and storage:
+
+    - ``q_vert``: net vertical flow **without storage**, mod-PATH3DU's
+      ``(qtop - qbot) + (qtopface - qbotface)``: minus the net inflow
+      through the cell's top and bottom faces, counting cell-to-cell flow
+      and boundary flow routed to those faces. Pass the same ``q_vert``
+      to ``hydrate_waterloo_inputs()``.
+    - ``q_storage``: storage flow (L³/T) in MODFLOW's sign, positive =
+      water released from storage into the cell. MODFLOW 6: ``STO-SS +
+      STO-SY`` per cell (through the API, ``GWF/STO/STRGSS +
+      GWF/STO/STRGSY``); MODFLOW-2005 / USG: ``STORAGE``. Zeros for steady
+      state. **Do not negate.** ``fit_waterloo()`` subtracts it from
+      ``q_vert``, as mod-PATH3DU does; do not also add it to ``q_vert``.
+
+    For a cell whose budget closes, ``q_vert - q_storage`` equals
+    ``sum(face_flow) + q_well + q_other`` for that cell.
+
     See ``docs/reference/units-and-conventions.md`` for the full reference.
     """
     ...
@@ -540,6 +564,9 @@ def hydrate_waterloo_inputs(
 
     The Waterloo method subtracts the analytic well singularity during fitting
     and adds it back during evaluation; both must use the same ``q_well`` sign.
+
+    ``q_vert``: the same array as for ``hydrate_cell_flows()``, **without
+    storage**. ``fit_waterloo()`` subtracts ``cell_flows.q_storage`` from it.
     See ``docs/reference/units-and-conventions.md`` for the full reference.
     """
     ...
@@ -581,6 +608,12 @@ def fit_waterloo(
     Sign conventions: fit_inputs must use face_flow positive = INTO cell
     (same array as hydrate_cell_flows; q_well = raw MODFLOW sign).
     See hydrate_waterloo_inputs() and docs/reference/units-and-conventions.md.
+
+    Storage: ``cell_flows.q_storage`` is subtracted from the vertical term
+    ``q_vert`` of both ``fit_inputs`` and ``cell_flows``, as mod-PATH3DU
+    2.1.9 does (``qvert = ... - qsto``). Pass storage only in
+    ``q_storage``, in MODFLOW's sign; do not also add it to ``q_vert``.
+    Before 0.1.2, ``q_storage`` was accepted but not used.
     """
     ...
 

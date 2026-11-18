@@ -157,10 +157,20 @@ Runs the MODFLOW 6 simulation via the shared-library API, extracts heads and flo
 | CHD node list | `GWF/CHD_0/NODELIST` | 1-based cell indices for CHD cells |
 | WEL pumping rates | `GWF/WEL_0/Q` | Pumping rates per well |
 | WEL node list | `GWF/WEL_0/NODELIST` | 1-based cell indices for well cells |
+| Specific-storage flow | `GWF/STO/STRGSS` | Storage flow per cell, `STO-SS` (transient only) |
+| Specific-yield flow | `GWF/STO/STRGSY` | Storage flow per cell, `STO-SY` (transient only) |
 
 ### Transient Extension
 
-The same pattern extends to transient simulations. Instead of calling `mf6.update()` once, loop over stress periods and call `mp3du.run_simulation()` after each solve to track particles through time-varying flow fields.
+The same pattern extends to transient simulations. Instead of calling `mf6.update()` once, loop over the time steps: after each `mf6.update()`, read the arrays above, build a new velocity field with `fit_waterloo()`, and call `mp3du.run_simulation()` to move the particles on through that step's flow field.
+
+In a transient model, part of each cell's flow goes into or comes out of storage. Pass it to `hydrate_cell_flows()` as `q_storage`, as MODFLOW 6 reports it:
+
+```python
+q_storage = mf6.get_value("GWF/STO/STRGSS") + mf6.get_value("GWF/STO/STRGSY")
+```
+
+Positive means water released from storage into the cell; do not negate it, and do not also add it to `q_vert`. `fit_waterloo()` subtracts `q_storage` from `q_vert`, as mod-PATH3DU does. This needs MP3DU-RS 0.1.2 or later: 0.1.0 and 0.1.1 accepted `q_storage` but did not use it.
 
 ## See Also
 

@@ -46,7 +46,10 @@ class TrajectoryResult:
     particle_id: int
     final_status: str
     termination_reason: str
-    def to_records(self) -> List[Dict[str, Any]]: ...
+    def to_records(self) -> List[Dict[str, Any]]:
+        """One dict per step, with the keys ``step``, ``time``, ``x``, ``y``,
+        ``z``, ``vx``, ``vy``, ``vz``, ``cell_id`` and ``dt``."""
+        ...
     def __len__(self) -> int: ...
 
 
@@ -59,6 +62,43 @@ class WaterlooFieldHandle:
     def is_loaded(self) -> bool: ...
     def method_name(self) -> str: ...
     def n_cells(self) -> int: ...
+
+
+# Alias — fit_sspa() and fit_waterloo() both return the same handle type.
+VelocityFieldHandle = WaterlooFieldHandle
+
+
+class SspaConfig:
+    def __init__(self, search_radius: float, krig_offset: float = 0.1) -> None: ...
+    @property
+    def search_radius(self) -> float: ...
+    @property
+    def krig_offset(self) -> float: ...
+
+
+class SspaInputs:
+    def n_cells(self) -> int: ...
+
+
+def hydrate_sspa_inputs(
+    heads: npt.NDArray[np.float64],
+    porosity: npt.NDArray[np.float64],
+    well_mask: npt.NDArray[np.bool_],
+    hhk: npt.NDArray[np.float64],
+) -> SspaInputs: ...
+
+
+def fit_sspa(
+    config: SspaConfig,
+    grid: GridHandle,
+    inputs: SspaInputs,
+    drifts: List[Dict[str, Any]],
+) -> VelocityFieldHandle:
+    """Fit the SSP&A (kriging-based) velocity field.
+
+    Consumes the GridHandle (it will no longer be loaded after the call).
+    """
+    ...
 
 
 class CellProperties:
@@ -156,6 +196,18 @@ def hydrate_cell_flows(
     Sign conventions (pass raw MODFLOW values — no negation):
       - face_flow: positive = into cell (MODFLOW-USG / MF6 convention).
       - q_well: negative = extraction, positive = injection (raw MODFLOW sign).
+      - q_vert: net vertical flow WITHOUT storage, mod-PATH3DU's
+        (qtop - qbot) + (qtopface - qbotface): minus the net inflow through
+        the top and bottom faces, cell-to-cell and boundary flows alike.
+        Pass the same q_vert to hydrate_waterloo_inputs.
+      - q_storage: storage flow, L^3/T, MODFLOW's sign: positive = water
+        released from storage into the cell. MODFLOW 6: STO-SS + STO-SY
+        (API: GWF/STO/STRGSS + GWF/STO/STRGSY); MODFLOW-2005/USG: STORAGE.
+        Zeros for steady state. fit_waterloo subtracts it from q_vert, as
+        mod-PATH3DU does; do not also add it to q_vert.
+
+    For a cell whose budget closes, q_vert - q_storage equals
+    sum(face_flow) + q_well + q_other for that cell.
 
     See docs/reference/units-and-conventions.md for the full reference.
     """
@@ -188,6 +240,8 @@ def hydrate_waterloo_inputs(
         The Waterloo method subtracts the analytic well singularity
         during fitting and adds it back during evaluation; both must
         use the same sign.
+      - q_vert: the same array as for hydrate_cell_flows, WITHOUT storage.
+        fit_waterloo subtracts cell_flows.q_storage from it.
 
     See docs/reference/units-and-conventions.md for the full reference.
     """
@@ -216,13 +270,18 @@ def fit_waterloo(
     Sign conventions: fit_inputs must use face_flow positive = INTO cell
     (same array as hydrate_cell_flows; q_well = raw MODFLOW sign).
     See hydrate_waterloo_inputs() and docs/reference/units-and-conventions.md.
+
+    Storage: cell_flows.q_storage is subtracted from the vertical term
+    q_vert of both fit_inputs and cell_flows, as mod-PATH3DU 2.1.9 does
+    (qvert = ... - qsto). Pass storage only in q_storage, in MODFLOW's
+    sign; do not also add it to q_vert.
     """
     ...
 
 
 def run_simulation(
     config: SimulationConfig,
-    velocity_field: WaterlooFieldHandle,
+    velocity_field: VelocityFieldHandle,
     particles: List[ParticleStart],
     parallel: bool = True,
 ) -> List[TrajectoryResult]:

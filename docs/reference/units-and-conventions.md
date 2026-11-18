@@ -93,8 +93,8 @@ once to positive = INTO, then pass the result to both.
 |----------|------------|-------------|
 | Face flow (`hydrate_cell_flows`) | positive = **into** the cell | mp3du convention; transform your MODFLOW output to match |
 | Face flow (`hydrate_waterloo_inputs`) | positive = **into** the cell | same array as `hydrate_cell_flows` — no separate transformation |
-| `q_top` positive | Flow entering through the top face (from above) | |
-| `q_bot` positive | Flow entering through the bottom face (from below) | |
+| `q_top` positive | Flow **upward** through the top face, i.e. **out** of the cell | As the C++ (`qtop + qtopface`). Recharge entering the top is **negative** |
+| `q_bot` positive | Flow **upward** through the bottom face, i.e. **into** the cell from below | As the C++ (`qbot + qbotface`) |
 | `q_well` (everywhere) | **negative** = pumping (extraction), positive = injection | Raw MODFLOW sign — **never negate** |
 | `q_storage` | **positive** = water released from storage into the cell | Raw MODFLOW sign — **never negate**. MODFLOW 6: `STO-SS + STO-SY`; MODFLOW-2005 / USG: `STORAGE`; zeros for steady state |
 | `q_vert` | net vertical flow through the top and bottom faces (cell-to-cell **and** boundary flows), **without** storage | `fit_waterloo()` subtracts `q_storage` from it. See [IFACE Flow Routing](iface-flow-routing.md#q_vert-consistency-audit-results) |
@@ -268,16 +268,25 @@ sign conventions, and the ``route_iface_bc_flows()`` Python helper.
 #### IFACE Sign Conventions
 
 All `bc_flow` values passed to `hydrate_cell_flows()` use **raw MODFLOW sign**
-(negative = extraction/out of cell, positive = injection/into cell). The Rust
-hydration layer applies any internal negation as needed:
+(negative = extraction/out of cell, positive = injection/into cell).
+`hydrate_cell_flows()` uses the `bc_*` arrays only to decide capture (and sets
+`has_well` for IFACE 0 cells); it does not add them to any flow term. The flow terms are built in Python, by you or by
+`route_iface_bc_flows()`, with these signs:
 
-| IFACE | Target Array | Internal Negation? | Notes |
-|-------|-------------|-------------------|-------|
-| 0 | `q_well` | Yes (negate) | Well at cell centre |
+| IFACE | Target Array | Negate? | Notes |
+|-------|-------------|---------|-------|
+| 0 | `q_well` | No (raw) | Well at cell centre; negative = pumping |
 | 2 | `q_other` | No (raw) | Distributed side-face BC |
-| 5 | `q_bot` | No (raw) | Bottom-face BC |
-| 6 | `q_top` | Yes (negate) | Top-face BC (e.g., recharge) |
+| 5 | `q_bot` | No (raw) | Bottom-face BC; `q_bot` is positive upward |
+| 6 | `q_top` | Yes (negate) | Top-face BC (e.g., recharge); `q_top` is positive upward |
 | 7 | `q_top` | Yes (negate) | Internal BC, no well |
+
+IFACE 5, 6 and 7 flows are also part of `q_vert`, the net vertical term.
+
+!!! warning "Corrected 2026-11-18"
+    This table used to say that IFACE 0 flows are negated. They are not: pass the
+    well rate as MODFLOW reports it. See
+    [IFACE Flow Routing](iface-flow-routing.md).
 
 #### Aggregation Rule
 

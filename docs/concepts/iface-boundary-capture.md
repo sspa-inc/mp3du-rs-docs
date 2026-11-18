@@ -66,24 +66,25 @@ the velocity equation:
 - **IFACE 2** → `q_other`: added to the distributed source/sink term.
   Contributes to the uniform volumetric flux within the cell.
 - **IFACE 5** → `q_bot`: added to the bottom-face vertical flux.
-  Affects the vertical velocity component.
-- **IFACE 6** → `q_top`: added to the top-face vertical flux.
-  Affects the vertical velocity component.
+  Affects the vertical velocity component, and is part of `q_vert`.
+- **IFACE 6** → `q_top` (with sign negation): added to the top-face vertical
+  flux. Affects the vertical velocity component, and is part of `q_vert`.
 - **IFACE 7** → `q_top` (with sign negation): treated the same as IFACE 6
   for velocity purposes, but classified differently for capture.
 
 ### Sign Conventions
 
 All `bc_flow` values use **raw MODFLOW sign** (negative = extraction,
-positive = injection). The Rust hydration layer applies internal negation
-for IFACE 0, 6, and 7:
+positive = injection). `hydrate_cell_flows()` uses them only to decide
+capture (and sets `has_well` for IFACE 0 cells). The flow terms are built in Python, by you or by
+`route_iface_bc_flows()`, which negates IFACE 6 and 7 only:
 
-| IFACE | Internal Negation? | Reason |
-|-------|-------------------|--------|
-| 0 | Yes | Waterloo singularity subtraction convention |
+| IFACE | Negate? | Reason |
+|-------|---------|--------|
+| 0 | No | `q_well` is MODFLOW's well rate, negative = pumping |
 | 2 | No | Direct addition to `q_other` |
-| 5 | No | Direct addition to `q_bot` |
-| 6 | Yes | Top-face sign convention |
+| 5 | No | `q_bot` is positive upward, into the cell from below |
+| 6 | Yes | `q_top` is positive upward, so inflow through the top is negative |
 | 7 | Yes | Same as IFACE 6 for flow routing |
 
 See [Units & Conventions — IFACE Sign Conventions](../reference/units-and-conventions.md#iface-sign-conventions) for the complete reference.

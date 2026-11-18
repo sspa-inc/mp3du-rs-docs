@@ -106,7 +106,7 @@ These are the highest-value references to name explicitly in your prompt:
 > - where layer type will come from (`LAYTYP`, `LAYCON`, or `icelltype`)
 > - how face connectivity / CSR arrays are expected to be assembled
 > - whether IFACE boundary metadata appears available
-> - whether the model likely needs separate cell-to-cell `q_vert` versus total `q_top` / `q_bot` arrays
+> - how `q_vert` (all flow through the top and bottom faces, without storage), `q_storage`, and the total `q_top` / `q_bot` arrays (positive upward) will be built
 
 ---
 
@@ -178,7 +178,7 @@ These are the highest-value references to name explicitly in your prompt:
 > 2. Prepares per-cell arrays for `hydrate_cell_properties()`.
 > 3. Prepares `CellFlows` arrays using raw MODFLOW signs where required.
 > 4. Prepares `WaterlooInputs` arrays using Waterloo sign conventions where required.
-> 5. Keeps `q_vert` as cell-to-cell vertical flow only, while `q_top` and `q_bot` can carry total vertical flow for `hydrate_cell_flows()`.
+> 5. Builds `q_vert` from the cell balance, `sum(face_flow) + q_well + q_other + q_storage`, so that it holds cell-to-cell and boundary flow through the top and bottom faces but not storage; passes storage (MF6: `STO-SS + STO-SY`) in `q_storage`; and builds `q_top` and `q_bot` as total flows through those faces, positive upward (recharge entering the top is negative).
 > 6. If IFACE-tagged boundary records are present, keeps `bc_flow` in raw MODFLOW sign and routes them to the correct buckets without double counting.
 >
 > Please include:

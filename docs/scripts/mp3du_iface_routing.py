@@ -40,7 +40,7 @@ The routing function applies the appropriate sign transformation per IFACE:
 =====  ============  =============  ====================================
 IFACE  Target Array  Sign Applied   C++ Reference
 =====  ============  =============  ====================================
-  0    q_well        Negate         ``set_qwel(-1.*(*pdata[m]))``
+  0    q_well        Raw            ``set_qwel(*pdata[m])``
   2    q_other       Raw            ``set_qother(*pdata[m])``
   5    q_bot         Raw            ``set_qbot(*pdata[m])``
   6    q_top         Negate         ``set_qtop(-1.*(*pdata[m]))``
@@ -96,17 +96,20 @@ def route_iface_bc_flows(
     -------
     dict with keys:
         ``"q_well"``   : ndarray float64, shape (n_cells,)
-            IFACE 0 flows, **negated** (matching C++ ``set_qwel(-1*val)``).
+            IFACE 0 flows, **raw MODFLOW sign** (negative = pumping; C++
+            ``set_qwel(*pdata[m])``).
             Add to q_well arrays for both ``hydrate_cell_flows()`` and
             ``hydrate_waterloo_inputs()``.
         ``"q_other"``  : ndarray float64, shape (n_cells,)
             IFACE 2 flows, **raw MODFLOW sign**.
             Add to q_other for ``hydrate_waterloo_inputs()``.
         ``"q_top"``    : ndarray float64, shape (n_cells,)
-            IFACE 6 + 7 flows, **negated** (matching C++ ``set_qtop(-1*val)``).
-            Add to q_top for ``hydrate_cell_flows()``.
+            IFACE 6 + 7 flows, **negated** (matching C++ ``set_qtop(-1*val)``):
+            ``q_top`` is positive upward, so recharge entering the top is
+            negative. Add to q_top for ``hydrate_cell_flows()``.
         ``"q_bot"``    : ndarray float64, shape (n_cells,)
-            IFACE 5 flows, **raw MODFLOW sign**.
+            IFACE 5 flows, **raw MODFLOW sign** (``q_bot`` is positive
+            upward, into the cell from below).
             Add to q_bot for ``hydrate_cell_flows()``.
         ``"has_well"`` : ndarray bool, shape (n_cells,)
             True for cells with any IFACE 0 entry.
@@ -126,13 +129,13 @@ def route_iface_bc_flows(
     ...     bc_iface=np.array([2, 0, 6], dtype=np.int32),
     ...     bc_flow=np.array([-1.5, -10.0, 0.01], dtype=np.float64),
     ... )
-    >>> routes["q_other"][0]   # IFACE 2: raw sign
+    >>> float(routes["q_other"][0])   # IFACE 2: raw sign
     -1.5
-    >>> routes["q_well"][3]    # IFACE 0: negated
-    10.0
-    >>> routes["q_top"][5]     # IFACE 6: negated
+    >>> float(routes["q_well"][3])    # IFACE 0: raw sign
+    -10.0
+    >>> float(routes["q_top"][5])     # IFACE 6: negated
     -0.01
-    >>> routes["has_well"][3]
+    >>> bool(routes["has_well"][3])
     True
     """
     bc_cell_ids = np.asarray(bc_cell_ids, dtype=np.int64)
@@ -178,10 +181,10 @@ def route_iface_bc_flows(
             "has_well": has_well,
         }
 
-    # IFACE 0 → q_well (negate)
+    # IFACE 0 → q_well (raw sign: negative = pumping, as C++ set_qwel(*pdata[m]))
     mask_0 = bc_iface == 0
     if mask_0.any():
-        np.add.at(q_well, bc_cell_ids[mask_0], -bc_flow[mask_0])
+        np.add.at(q_well, bc_cell_ids[mask_0], bc_flow[mask_0])
         has_well[np.unique(bc_cell_ids[mask_0])] = True
 
     # IFACE 2 → q_other (raw sign)

@@ -196,6 +196,11 @@ def hydrate_cell_flows(
     Sign conventions (pass raw MODFLOW values — no negation):
       - face_flow: positive = into cell (MODFLOW-USG / MF6 convention).
       - q_well: negative = extraction, positive = injection (raw MODFLOW sign).
+      - q_top, q_bot: total flow through the top and bottom faces
+        (cell-to-cell and boundary), positive UPWARD as in mod-PATH3DU:
+        q_bot positive = into the cell from below; q_top positive = out
+        through the top, so recharge entering the top is negative.
+        Used for the vertical velocity only.
       - q_vert: net vertical flow WITHOUT storage, mod-PATH3DU's
         (qtop - qbot) + (qtopface - qbotface): minus the net inflow through
         the top and bottom faces, cell-to-cell and boundary flows alike.

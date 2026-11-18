@@ -66,8 +66,8 @@ Cell flows provide the hydraulic state and inter-cell fluxes:
 cell_flows = mp3du.hydrate_cell_flows(
     head=head_array,               # hydraulic head (n_cells,)
     water_table=wt_array,          # water table elevation (n_cells,)
-    q_top=q_top_array,             # top-face recharge flux (n_cells,)
-    q_bot=q_bot_array,             # bottom-face flux (n_cells,)
+    q_top=q_top_array,             # flow up through the top face; recharge is negative (n_cells,)
+    q_bot=q_bot_array,             # flow up through the bottom face (n_cells,)
     q_vert=q_vert_array,           # net vertical flow, without storage (n_cells,)
     q_well=q_well_array,           # well pumping rate (n_cells,)
     q_other=q_other_array,         # other source/sink (n_cells,)

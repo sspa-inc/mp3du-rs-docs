@@ -23,7 +23,7 @@ the equivalent mapping for mp3du-rs, implemented in Python.
 
 | IFACE | Meaning | C++ Code Reference |
 |-------|---------|-------------------|
-| 0 | Internal well (flow applied at cell centre) | `set_qwel(-1.*(*pdata[m]))` |
+| 0 | Internal well (flow applied at cell centre) | `set_qwel(*pdata[m])` |
 | 2 | Side face / distributed (flow distributed to cell perimeter) | `set_qother(*pdata[m])` |
 | 5 | Bottom face (flow applied at cell bottom) | `set_qbot(*pdata[m])` |
 | 6 | Top face (flow applied at cell top) | `set_qtop(-1.*(*pdata[m]))` |
@@ -45,7 +45,7 @@ enter `q_vert`, as in mod-PATH3DU, where `qtop` and `qbot` are part of
 
 | IFACE | Target Field | Sign Transformation | Rationale |
 |-------|-------------|---------------------|-----------|
-| 0 | `q_well` | **Negate** MODFLOW value | C++: `set_qwel(-1.*val)`.  The Waterloo method subtracts the analytic well singularity during fitting and adds it back during evaluation.  Both use this negated value. |
+| 0 | `q_well` | **Raw** MODFLOW sign (negative = pumping) | C++: `set_qwel(val)` (`cls_flowmodel.cpp` L587, L595, L654).  The Waterloo method subtracts the analytic well singularity during fitting and adds it back during evaluation.  Both use this value. |
 | 2 | `q_other` | **Raw** MODFLOW sign | C++: `set_qother(val)`.  Distributed to no-flow faces during fitting. |
 | 5 | `q_vert` | see [`q_vert`](#q_vert-consistency-audit-results) | C++: `set_qbot(val)`; `qbot` is part of `qvert`.  Also in `q_bot` for vertical velocity. |
 | 6 | `q_vert` | see [`q_vert`](#q_vert-consistency-audit-results) | C++: `set_qtop(-1.*val)`; `qtop` is part of `qvert`.  Also in `q_top` for vertical velocity. |
@@ -58,17 +58,24 @@ for vertical velocity interpolation (Pollock's method):
 
 | IFACE | Target Field | Sign Transformation | Rationale |
 |-------|-------------|---------------------|-----------|
-| 0 | `q_well` | **Negate** MODFLOW value | Same negated value as fitting.  Used for the well singularity correction in `eval_waterloo_velocity()`. |
+| 0 | `q_well` | **Raw** MODFLOW sign | Same value as fitting.  Used for the well singularity correction in `eval_waterloo_velocity()`. |
 | 2 | *(not in eval context)* | — | Absorbed into horizontal velocity during fitting. |
 | 5 | `q_bot_total` | **Raw** MODFLOW sign | C++: `set_qbot(val)`.  Added to cell-to-cell bottom flow for Pollock vz interpolation. |
 | 6 | `q_top_total` | **Negate** MODFLOW value | C++: `set_qtop(-1.*val)`.  Added to cell-to-cell top flow for Pollock vz interpolation. |
 | 7 | `q_top_total` | **Negate** MODFLOW value | C++: `set_qtop(-1.*val)`.  Same treatment as IFACE 6. |
 
+`q_top` and `q_bot` are flows in the **+z direction (upward)** through the top and
+bottom faces, as in the C++ (`q2 = qtopface + qtop`, `q1 = qbotface + qbot`).  So
+`q_bot` positive is flow into the cell from below, and `q_top` positive is flow
+**out** through the top.  That is why IFACE 6 and 7 flows, which MODFLOW reports
+positive into the cell, are negated: recharge entering the top gives a negative
+`q_top`.
+
 ### Summary Table
 
 | IFACE | `CellFitInput.q_well` | `CellFitInput.q_other` | `CellFlows.q_top` | `CellFlows.q_bot` | Sign |
 |-------|----------------------|----------------------|-------------------|-------------------|------|
-| 0 | ✓ | | | | Negate |
+| 0 | ✓ | | | | Raw |
 | 2 | | ✓ | | | Raw |
 | 5 | | | | ✓ | Raw |
 | 6 | | | ✓ | | Negate |
@@ -78,6 +85,15 @@ for vertical velocity interpolation (Pollock's method):
     A BC flow must never be double-counted.  IFACE 2 flows go to `q_other`
     only — they do NOT additionally contribute to `q_top` or `q_bot`.
     IFACE 7 flows go to `q_top` only — they do NOT go to `q_other`.
+    (IFACE 5, 6 and 7 flows are also part of the net term `q_vert`; see below.)
+
+!!! warning "Corrected 2026-11-18: IFACE 0 is not negated"
+    Earlier versions of this page, and of `route_iface_bc_flows()`, negated
+    IFACE 0 flows before adding them to `q_well`.  The well rate must be passed
+    as MODFLOW reports it, negative for pumping, as the C++ does for ordinary
+    boundary records.  With the negated rate the well cell's flow field is
+    wrong: in a test with a pumping well and a 1 m capture radius, particles
+    stalled at the corners of the well cell instead of being captured.
 
 ---
 

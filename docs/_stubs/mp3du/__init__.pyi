@@ -361,12 +361,16 @@ class CellFlows:
 
     @property
     def q_top(self) -> List[float]:
-        """Volumetric flux entering through the cell top (L³/T, raw MODFLOW sign)."""
+        """Total flow through the cell top (L³/T), positive **upward**, i.e. out of
+        the cell; recharge entering the top is negative (mod-PATH3DU's
+        ``qtop + qtopface``). Used for the vertical velocity."""
         ...
 
     @property
     def q_bot(self) -> List[float]:
-        """Volumetric flux entering through the cell bottom (L³/T, raw MODFLOW sign)."""
+        """Total flow through the cell bottom (L³/T), positive **upward**, i.e.
+        into the cell from below (mod-PATH3DU's ``qbot + qbotface``). Used for
+        the vertical velocity."""
         ...
 
     @property
@@ -514,6 +518,12 @@ def hydrate_cell_flows(
     Never negate ``q_well``.
 
     Vertical flow and storage:
+
+    - ``q_top``, ``q_bot``: total flow through the top and bottom faces
+      (cell-to-cell and boundary), positive **upward** as in mod-PATH3DU.
+      ``q_bot`` positive is flow into the cell from below; ``q_top``
+      positive is flow out through the top, so recharge entering the top
+      is negative. Used for the vertical velocity only.
 
     - ``q_vert``: net vertical flow **without storage**, mod-PATH3DU's
       ``(qtop - qbot) + (qtopface - qbotface)``: minus the net inflow

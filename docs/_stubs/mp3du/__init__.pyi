@@ -624,6 +624,13 @@ def fit_waterloo(
     2.1.9 does (``qvert = ... - qsto``). Pass storage only in
     ``q_storage``, in MODFLOW's sign; do not also add it to ``q_vert``.
     Before 0.1.2, ``q_storage`` was accepted but not used.
+
+    Raises:
+        ValueError: If the inputs do not match the grid, or a cell cannot be
+            fitted: fewer than 3 faces, face arrays of different lengths, or
+            a no-flow face index out of range. The message names the cell.
+            (Before 0.1.3 such a cell ended the Python process when a
+            particle first entered it.)
     """
     ...
 

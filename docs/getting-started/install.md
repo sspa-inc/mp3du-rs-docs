@@ -20,14 +20,14 @@ Go to the [mod-PATH3DU Releases Page](https://github.com/sspa-inc/mp3du-rs/relea
 You can install the `.whl` file directly using its URL. Right-click the `.whl` file in the release assets, copy the link address, and run:
 
 ```bash
-pip install https://github.com/sspa-inc/mp3du-rs/releases/download/v0.1.2/mp3du_py-0.1.2-cp38-abi3-win_amd64.whl
+pip install https://github.com/sspa-inc/mp3du-rs/releases/download/v0.1.3/mp3du_py-0.1.3-cp38-abi3-win_amd64.whl
 ```
 *(Note: Replace the URL above with the actual link to the latest release).*
 
 Alternatively, you can download the `.whl` file to your computer and install it locally:
 
 ```bash
-pip install path/to/downloaded/mp3du_py-0.1.2-cp38-abi3-win_amd64.whl
+pip install path/to/downloaded/mp3du_py-0.1.3-cp38-abi3-win_amd64.whl
 ```
 
 !!! tip "Virtual environment recommended"
@@ -36,7 +36,7 @@ pip install path/to/downloaded/mp3du_py-0.1.2-cp38-abi3-win_amd64.whl
     ```bash
     python -m venv .venv
     .venv\Scripts\activate
-    pip install https://github.com/sspa-inc/mp3du-rs/releases/download/v0.1.2/mp3du_py-0.1.2-cp38-abi3-win_amd64.whl
+    pip install https://github.com/sspa-inc/mp3du-rs/releases/download/v0.1.3/mp3du_py-0.1.3-cp38-abi3-win_amd64.whl
     ```
 
 ## Verify Installation
@@ -48,7 +48,7 @@ import mp3du
 print(mp3du.version())
 ```
 
-You should see a version string like `0.1.2`. If the import succeeds, the installation is complete.
+You should see a version string like `0.1.3`. If the import succeeds, the installation is complete.
 
 !!! tip
     If the import fails with `ModuleNotFoundError`, ensure you are in the correct virtual environment and the package is installed (`pip list | findstr mp3du`).

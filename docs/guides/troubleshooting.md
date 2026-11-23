@@ -56,8 +56,8 @@ See [Solver Methods](../reference/solver-methods.md) for all solver options.
 **Cause:** The configuration JSON does not conform to the schema. Common sub-causes:
 
 - Missing required fields
-- Extra fields (the schema sets `additionalProperties: false`)
-- Wrong types (e.g., integer `1` instead of float `1.0` for `direction`)
+- Extra fields (the schema sets `additionalProperties: false`; since 0.1.4 `SimulationConfig.from_json()` rejects them too, with ``unknown field `{key}` ``)
+- Wrong types (e.g., the string `"1.0"` instead of the number `1.0` for `direction`)
 
 **Solution:** Validate against the schema to get a specific error message:
 
@@ -81,17 +81,25 @@ except jsonschema.ValidationError as e:
 
 See [Schema Reference](../reference/schema-reference.md) for field specifications and [Building Configs](building-configs.md) for common mistakes.
 
-### `direction` must be exactly `1.0` or `-1.0`
+### `direction` must be `1.0` or `-1.0`
 
-**Error pattern:** `1 is not one of [1.0, -1.0]`
+**Error pattern:** `direction must be 1.0 (forward) or -1.0 (backward)` (from `from_json()`), or `0.5 is not one of [1.0, -1.0]` (from `jsonschema`)
 
-**Cause:** The `direction` field uses an enum constraint. Integer values like `1` or `-1` are rejected because JSON distinguishes integers from floats.
+**Cause:** The `direction` field is not one of the two allowed values; it is not a speed or a range. Writing `1` or `-1` as an integer is accepted, since these are the same values.
 
 **Solution:**
 
 ```json
 "direction": 1.0
 ```
+
+### Unknown field in the configuration
+
+**Error pattern:** ``unknown field `capture_raduis`, expected one of `max_time`, `max_steps`, ...``
+
+**Cause:** The configuration contains a key it does not have, usually a misspelling. Since 0.1.4 this is an error; before, such a key was ignored, so a misspelled optional setting fell back to its default without notice.
+
+**Solution:** Correct or remove the key. The message lists the keys accepted at that level of the configuration.
 
 ## Runtime Errors
 
@@ -141,7 +149,7 @@ See [Schema Reference](../reference/schema-reference.md) for field specification
 
 ### Array dimension mismatch
 
-**Error pattern:** `array length N does not match expected M` during hydration
+**Error pattern:** `Array '{name}' has length N, expected M` during hydration
 
 **Cause:** One or more NumPy arrays passed to `hydrate_cell_properties()` or `hydrate_cell_flows()` has the wrong length.
 
@@ -158,15 +166,30 @@ All per-cell arrays must have shape `(n_cells,)`. Face arrays (`face_flow`, `fac
 
 ### Non-contiguous array error
 
-**Error pattern:** `array must be C-contiguous`
+**Error pattern:** `Array '{name}' must be a contiguous 1D numpy.float64 array`
 
-**Cause:** NumPy arrays passed to hydration functions must be C-contiguous. Transposed or sliced arrays may not be.
+**Cause:** Float and bool arrays passed to hydration functions must be C-contiguous. Transposed or sliced arrays may not be. (The integer arrays need not be.)
 
 **Solution:**
 
 ```python
 array = np.ascontiguousarray(array)
 ```
+
+### Wrong array dtype
+
+**Error pattern:** `TypeError: argument 'head': expected a 1-D NumPy array of dtype float64, got a 1-D array of dtype int64; ...`
+
+**Cause:** Float arrays must be `float64` and masks `bool`; an array built from integers (`np.array([10, 20])`) or with `float32` values is rejected. The integer arrays (`face_offset`, `face_neighbor` and the `bc_*` ids and codes) accept any integer dtype.
+
+**Solution:** Convert as the message says:
+
+```python
+head = np.asarray(head, dtype="float64")
+has_well = np.asarray(has_well, dtype=bool)
+```
+
+See [Error Diagnostics](../reference/error-diagnostics.md#wrong-array-type-or-dtype).
 
 ### NaN or Inf in results
 

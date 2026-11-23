@@ -85,6 +85,12 @@
           "exclusiveMinimum": 0,
           "description": "Threshold of the adaptive solvers' emergency Euler step. If the step size shrinks to this value or below, the solver takes a forward-Euler step of this size, with no error control, so it acts as a floor on the step size. Set it equal to min_dt. The Euler solver does not use it; it steps at initial_dt. In model time units."
         }
+     ,
+        "relocate_stages": {
+          "type": "boolean",
+          "default": true,
+          "description": "When true, each Runge-Kutta stage finds the cell that contains it, as mod-PATH3DU does at every stage; when false, all stages of a step use the cell at the start of the step. Optional; default true."
+        }
       },
       "additionalProperties": false
     },
@@ -157,9 +163,9 @@
           "description": "Number of consecutive stagnant accepted steps required before termination. If velocity rises back above stagnation_velocity, the stagnation counter resets to zero."
         },
         "capture_radius": {
-          "type": "number",
+          "type": ["number", "null"],
           "exclusiveMinimum": 0,
-          "description": "Distance from the well centre (cell centre) used for internal-well capture. A particle is terminated only after it gets within this radius of the centre. Smaller values delay capture until the particle is very near the centre; larger values make capture occur sooner after entering the well cell."
+          "description": "Distance from the well centre (cell centre) used for internal-well capture. A particle is terminated only after it gets within this radius of the centre. Smaller values delay capture until the particle is very near the centre; larger values make capture occur sooner after entering the well cell. Omit it, or set it to null, to capture a particle as soon as it enters the well cell."
         },
         "face_epsilon": {
           "type": "number",
@@ -183,7 +189,7 @@
     "direction": {
       "type": "number",
       "enum": [1.0, -1.0],
-      "description": "Tracking direction. Use 1.0 for forward tracking (particles move downgradient / in the direction of flow) or -1.0 for backward tracking (particles move upgradient / against the flow direction). Must be exactly 1.0 or -1.0 — integer values (1, -1) are rejected by the schema."
+      "description": "Tracking direction. Use 1.0 for forward tracking (particles move downgradient / in the direction of flow) or -1.0 for backward tracking (particles move upgradient / against the flow direction). No other value is accepted; 1 and -1 written as integers are the same values and are accepted."
     }
   },
   "additionalProperties": false

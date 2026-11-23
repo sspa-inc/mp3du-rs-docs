@@ -43,7 +43,8 @@ The API reference pages (e.g., `ParticleStart`, `SimulationConfig`) are generate
 
 *   **Stub Location:** The type stubs are located in `docs/_stubs/mp3du/__init__.pyi` within the `mp3du-rs-docs` repository.
 *   **How it works:** A Markdown page like `docs/reference/python-api/ParticleStart.md` contains a special directive: `::: mp3du.ParticleStart`. When MkDocs builds the site, the `mkdocstrings` plugin reads the `__init__.pyi` file, extracts the signature and docstrings for `ParticleStart`, and replaces the directive with the generated HTML.
-*   **Maintenance Rule:** Whenever the Rust/Python API changes in the local source code, the updated `.pyi` stub file must be manually copied over to `docs/_stubs/mp3du/__init__.pyi` in the public `mp3du-rs-docs` repository to keep the documentation accurate.
+*   **Maintenance Rule:** The documentation stub is not a copy of the package's stub: it carries longer docstrings for the reference pages, and keeps `__init__` constructors without `@final`. When the Python API changes, apply the same signature changes to `docs/_stubs/mp3du/__init__.pyi` by hand, keeping its docstrings. The package's stub (`crates/mp3du-py/mp3du.pyi` in the private source repository, shipped in the wheel as `mp3du/__init__.pyi` since 0.1.4) is copied unchanged to `docs/assets/raw/mp3du.pyi`.
+*   **Copies to refresh:** `docs/llms-full.txt` contains the documentation stub (section "Python Type Stubs") and the raw schema `docs/assets/raw/mp3du_schema.json` (section "JSON Schema"), each verbatim. `docs/reference/schema-reference.md` contains the raw schema as `json.dumps(schema, indent=2)` in its "Raw JSON Schema" block, and its tables are edited by hand. The schema in the source repository (`python/mp3du_schema.json`) is shorter; the docs' copy has the longer descriptions and is the one users validate against.
 
 ## 5. AI-Agent Accessibility
 

@@ -121,7 +121,7 @@ nav:
       - ParticleStart: reference/python-api/ParticleStart.md
       - TrajectoryResult: reference/python-api/TrajectoryResult.md
       - GridHandle: reference/python-api/GridHandle.md
-      - WaterlooFieldHandle: reference/python-api/WaterlooFieldHandle.md
+      - VelocityFieldHandle: reference/python-api/WaterlooFieldHandle.md
       - CellProperties: reference/python-api/CellProperties.md
       - CellFlows: reference/python-api/CellFlows.md
       - WaterlooInputs: reference/python-api/WaterlooInputs.md

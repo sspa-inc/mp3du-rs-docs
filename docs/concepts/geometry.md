@@ -98,7 +98,7 @@ After loading the grid, cell properties, cell flows, and Waterloo-specific input
 field = mp3du.fit_waterloo(config, grid, waterloo_inputs, cell_props, cell_flows)
 ```
 
-The returned `WaterlooFieldHandle` can then evaluate velocity at any point within the grid domain.
+The returned `VelocityFieldHandle` can then evaluate velocity at any point within the grid domain.
 
 ## Coordinate Systems
 

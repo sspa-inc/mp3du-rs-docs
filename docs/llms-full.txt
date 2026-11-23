@@ -68,7 +68,13 @@ class SimulationConfig:
             A validated ``SimulationConfig`` instance.
 
         Raises:
-            SchemaError: If the JSON is malformed or fails schema validation.
+            ValueError: If the JSON is malformed, a value is missing or
+                invalid, or the JSON contains a key that the configuration
+                does not have (for example, a misspelled key).
+
+        A ``UserWarning`` is issued for settings that are valid but
+        probably not intended, such as ``adaptive.euler_dt`` well above
+        ``adaptive.min_dt``.
         """
         ...
 
@@ -84,7 +90,10 @@ class SimulationConfig:
         """Validate the configuration against the schema.
 
         Raises:
-            SchemaError: If any field value is out of range or inconsistent.
+            ValueError: If any field value is out of range or inconsistent.
+
+        Like ``from_json()``, issues a ``UserWarning`` for settings that are
+        valid but probably not intended.
         """
         ...
 
@@ -133,10 +142,14 @@ class TrajectoryResult:
     Attributes:
         particle_id: The ``id`` supplied in the corresponding
             `ParticleStart`.
-        final_status: Short string tag for the terminal state, e.g.
-            ``"captured_well"``, ``"exited_domain"``, ``"max_steps"``.
+        final_status: The terminal state: ``"CapturedByWell"``,
+            ``"CapturedByBoundary"``, ``"CapturedAtModelEdge"``,
+            ``"ExitedDomain"``, ``"TimeLimitReached"``, ``"Stagnated"`` or
+            ``"SolverFailed"``.
         termination_reason: Human-readable description of why tracking
-            stopped.
+            stopped, for example ``"Internal sink/source: CONSTANT HEAD"``,
+            ``"Model Boundary"`` or ``"Time limit reached"``. It is empty
+            for ``ExitedDomain`` and ``SolverFailed``.
     """
 
     particle_id: int
@@ -166,7 +179,12 @@ class GridHandle:
 
     Produced by `build_grid()`.  The handle is *consumed* (invalidated) by
     `fit_waterloo()` or `fit_sspa()` — it cannot be reused after fitting.
+    A fitting call that raises ``ValueError`` leaves it loaded.
     """
+
+    def __init__(self) -> None:
+        """An empty, unloaded handle; build_grid() returns a loaded one."""
+        ...
 
     def is_loaded(self) -> bool:
         """Return ``True`` if the grid data is still resident in memory.
@@ -180,12 +198,18 @@ class GridHandle:
         ...
 
 
-class WaterlooFieldHandle:
+class VelocityFieldHandle:
     """Opaque handle to a fitted velocity field.
 
     Returned by both `fit_waterloo()` and `fit_sspa()`.  Pass this handle
     to `run_simulation()` to perform particle tracking.
+
+    ``WaterlooFieldHandle`` is another name for this class.
     """
+
+    def __init__(self) -> None:
+        """An empty, unloaded handle."""
+        ...
 
     def is_loaded(self) -> bool:
         """Return ``True`` if the fitted field data is resident in memory."""
@@ -199,9 +223,18 @@ class WaterlooFieldHandle:
         """Return the number of cells in the underlying grid."""
         ...
 
+    def velocity_at(self, x: float, y: float, z: float) -> Tuple[float, float, float]:
+        """Evaluate the velocity ``(vx, vy, vz)`` at the point ``(x, y, z)``.
+
+        Raises ``ValueError`` if the handle is not loaded or the velocity
+        cannot be evaluated there (for example, the point is outside the
+        model).
+        """
+        ...
+
 
 # Alias — fit_sspa() and fit_waterloo() both return the same handle type.
-VelocityFieldHandle = WaterlooFieldHandle
+WaterlooFieldHandle = VelocityFieldHandle
 
 
 class SspaConfig:
@@ -216,14 +249,16 @@ class SspaConfig:
             set ``search_radius = 2 * cell_size`` (or ``3 * cell_size``
             for safety).  A radius that is too large wastes time and
             over-smooths; a radius that is too small under-determines
-            the kriging system and produces noisy velocities.
+            the kriging system and produces noisy velocities. Default is
+            ``35.0`` (mod-PATH3DU's value), in model units; set it from
+            the raster cell size instead.
         krig_offset: Finite-difference offset used when estimating the
             kriged head gradient near the particle. Smaller values sample
             the gradient more locally; larger values smooth it over a
             wider distance. Default is ``0.1``.
     """
 
-    def __init__(self, search_radius: float, krig_offset: float = 0.1) -> None: ...
+    def __init__(self, search_radius: float = 35.0, krig_offset: float = 0.1) -> None: ...
 
     @property
     def search_radius(self) -> float:
@@ -248,6 +283,35 @@ class SspaInputs:
 
     def n_cells(self) -> int:
         """Return the number of cells represented in these inputs."""
+        ...
+
+    def __len__(self) -> int:
+        """Return the number of cells (same as ``n_cells()``)."""
+        ...
+
+    @property
+    def heads(self) -> List[float]:
+        """Simulated hydraulic heads per cell."""
+        ...
+
+    @property
+    def hydraulic_conductivity(self) -> List[float]:
+        """Horizontal hydraulic conductivity per cell."""
+        ...
+
+    @property
+    def hhk(self) -> List[float]:
+        """Alias for ``hydraulic_conductivity``."""
+        ...
+
+    @property
+    def porosity(self) -> List[float]:
+        """Effective porosity per cell."""
+        ...
+
+    @property
+    def well_mask(self) -> List[bool]:
+        """Boolean mask marking cells that contain a well."""
         ...
 
 
@@ -286,6 +350,7 @@ def fit_sspa(
     """Fit the SSP&A (kriging-based) velocity field.
 
     Consumes the GridHandle (it will no longer be loaded after the call).
+    If the inputs are rejected with ValueError, the GridHandle is left loaded.
     """
     ...
 
@@ -496,14 +561,14 @@ def hydrate_cell_flows(
     q_other: npt.NDArray[np.float64],
     q_storage: npt.NDArray[np.float64],
     has_well: npt.NDArray[np.bool_],
-    face_offset: npt.NDArray[np.uint64],
+    face_offset: npt.NDArray[np.integer[Any]],
     face_flow: npt.NDArray[np.float64],
-    face_neighbor: npt.NDArray[np.int64],
+    face_neighbor: npt.NDArray[np.integer[Any]],
     # Optional boundary condition metadata (IFACE-based capture)
-    bc_cell_ids: Optional[npt.NDArray[np.int64]] = None,
-    bc_iface: Optional[npt.NDArray[np.int32]] = None,
+    bc_cell_ids: Optional[npt.NDArray[np.integer[Any]]] = None,
+    bc_iface: Optional[npt.NDArray[np.integer[Any]]] = None,
     bc_flow: Optional[npt.NDArray[np.float64]] = None,
-    bc_type_id: Optional[npt.NDArray[np.int32]] = None,
+    bc_type_id: Optional[npt.NDArray[np.integer[Any]]] = None,
     bc_type_names: Optional[List[str]] = None,
     is_domain_boundary: Optional[npt.NDArray[np.bool_]] = None,
     has_water_table: Optional[npt.NDArray[np.bool_]] = None,
@@ -550,6 +615,11 @@ def hydrate_cell_flows(
     For a cell whose budget closes, ``q_vert - q_storage`` equals
     ``sum(face_flow) + q_well + q_other`` for that cell.
 
+    Arrays: all 1-D, one value per cell (face_*: one per face row). The
+    float arrays must be float64 and the masks bool. The integer arrays
+    (face_offset, face_neighbor and the bc_* ids and codes) may have any
+    integer dtype; each value is checked to fit.
+
     See ``docs/reference/units-and-conventions.md`` for the full reference.
     """
     ...
@@ -563,7 +633,7 @@ def hydrate_waterloo_inputs(
     q_vert: npt.NDArray[np.float64],
     q_well: npt.NDArray[np.float64],
     q_other: npt.NDArray[np.float64],
-    face_offset: npt.NDArray[np.uint64],
+    face_offset: npt.NDArray[np.integer[Any]],
     face_vx1: npt.NDArray[np.float64],
     face_vy1: npt.NDArray[np.float64],
     face_vx2: npt.NDArray[np.float64],
@@ -588,6 +658,10 @@ def hydrate_waterloo_inputs(
     ``q_vert``: the same array as for ``hydrate_cell_flows()``, **without
     storage**. ``fit_waterloo()`` subtracts ``cell_flows.q_storage`` from it.
     See ``docs/reference/units-and-conventions.md`` for the full reference.
+
+    Arrays: centers_xy has shape (n_cells, 2); the others are 1-D, one value
+    per cell or per face row. The float arrays must be float64 and
+    noflow_mask bool; face_offset may have any integer dtype.
     """
     ...
 
@@ -618,12 +692,22 @@ def fit_waterloo(
     fit_inputs: WaterlooInputs,
     cell_properties: CellProperties,
     cell_flows: CellFlows,
-) -> WaterlooFieldHandle:
+    top_neighbor: Optional[List[Optional[int]]] = None,
+    bot_neighbor: Optional[List[Optional[int]]] = None,
+    nodes_per_layer: int = 0,
+) -> VelocityFieldHandle:
     """Fit the Waterloo velocity field.
 
     Consumes the GridHandle (it will no longer be loaded after the call).
+    If the inputs are rejected with ValueError, the GridHandle is left loaded.
     Well locations are derived automatically from cell_flows.has_well
     and the grid cell centres.
+
+    Vertical connectivity: top_neighbor and bot_neighbor give, for each
+    cell, the id of the cell above and below it (None at the top or bottom
+    of the model; both default to None for every cell). nodes_per_layer is
+    the number of cells per layer, 0 for a single layer; it must divide the
+    number of cells.
 
     Sign conventions: fit_inputs must use face_flow positive = INTO cell
     (same array as hydrate_cell_flows; q_well = raw MODFLOW sign).
@@ -658,6 +742,8 @@ def run_simulation(
       - Omitted / null: capture immediately on cell entry (strong sink).
       - A positive number (e.g. 0.5): capture only when within that
         distance of the cell centre (weak sink).
+
+    A particle whose cell_id is not a cell of the field raises ValueError.
     """
     ...
 
@@ -753,6 +839,12 @@ def run_simulation(
           "exclusiveMinimum": 0,
           "description": "Threshold of the adaptive solvers' emergency Euler step. If the step size shrinks to this value or below, the solver takes a forward-Euler step of this size, with no error control, so it acts as a floor on the step size. Set it equal to min_dt. The Euler solver does not use it; it steps at initial_dt. In model time units."
         }
+     ,
+        "relocate_stages": {
+          "type": "boolean",
+          "default": true,
+          "description": "When true, each Runge-Kutta stage finds the cell that contains it, as mod-PATH3DU does at every stage; when false, all stages of a step use the cell at the start of the step. Optional; default true."
+        }
       },
       "additionalProperties": false
     },
@@ -825,9 +917,9 @@ def run_simulation(
           "description": "Number of consecutive stagnant accepted steps required before termination. If velocity rises back above stagnation_velocity, the stagnation counter resets to zero."
         },
         "capture_radius": {
-          "type": "number",
+          "type": ["number", "null"],
           "exclusiveMinimum": 0,
-          "description": "Distance from the well centre (cell centre) used for internal-well capture. A particle is terminated only after it gets within this radius of the centre. Smaller values delay capture until the particle is very near the centre; larger values make capture occur sooner after entering the well cell."
+          "description": "Distance from the well centre (cell centre) used for internal-well capture. A particle is terminated only after it gets within this radius of the centre. Smaller values delay capture until the particle is very near the centre; larger values make capture occur sooner after entering the well cell. Omit it, or set it to null, to capture a particle as soon as it enters the well cell."
         },
         "face_epsilon": {
           "type": "number",
@@ -851,7 +943,7 @@ def run_simulation(
     "direction": {
       "type": "number",
       "enum": [1.0, -1.0],
-      "description": "Tracking direction. Use 1.0 for forward tracking (particles move downgradient / in the direction of flow) or -1.0 for backward tracking (particles move upgradient / against the flow direction). Must be exactly 1.0 or -1.0 — integer values (1, -1) are rejected by the schema."
+      "description": "Tracking direction. Use 1.0 for forward tracking (particles move downgradient / in the direction of flow) or -1.0 for backward tracking (particles move upgradient / against the flow direction). No other value is accepted; 1 and -1 written as integers are the same values and are accepted."
     }
   },
   "additionalProperties": false

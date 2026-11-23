@@ -1,29 +1,63 @@
 """Type stubs for the mp3du Rust particle tracker."""
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, final
 
 import numpy as np
 import numpy.typing as npt
+
+__all__ = [
+    "version",
+    "hydrate_cell_properties",
+    "hydrate_cell_flows",
+    "hydrate_waterloo_inputs",
+    "hydrate_sspa_inputs",
+    "build_grid",
+    "fit_waterloo",
+    "fit_sspa",
+    "run_simulation",
+    "WaterlooConfig",
+    "SspaConfig",
+    "SimulationConfig",
+    "ParticleStart",
+    "TrajectoryResult",
+    "GridHandle",
+    "VelocityFieldHandle",
+    "WaterlooFieldHandle",
+    "CellProperties",
+    "CellFlows",
+    "WaterlooInputs",
+    "SspaInputs",
+]
 
 
 def version() -> str: ...
 
 
+@final
 class WaterlooConfig:
-    def __init__(self, order_of_approx: int = 35, n_control_points: int = 122) -> None: ...
+    def __new__(cls, order_of_approx: int = 35, n_control_points: int = 122) -> WaterlooConfig: ...
     @property
     def order_of_approx(self) -> int: ...
     @property
     def n_control_points(self) -> int: ...
 
 
+@final
 class SimulationConfig:
     @staticmethod
-    def from_json(json_str: str) -> "SimulationConfig": ...
+    def from_json(json_str: str) -> "SimulationConfig":
+        """Create from a JSON string.
+
+        Raises ValueError for an invalid configuration or an unknown key, and
+        issues a UserWarning for settings that are valid but probably not
+        intended.
+        """
+        ...
     def to_json(self) -> str: ...
     def validate(self) -> None: ...
 
 
+@final
 class ParticleStart:
     id: int
     x: float
@@ -31,21 +65,25 @@ class ParticleStart:
     z: float
     cell_id: int
     initial_dt: float
-    def __init__(
-        self,
+    def __new__(
+        cls,
         id: int,
         x: float,
         y: float,
         z: float,
         cell_id: int,
         initial_dt: float,
-    ) -> None: ...
+    ) -> ParticleStart: ...
 
 
+@final
 class TrajectoryResult:
-    particle_id: int
-    final_status: str
-    termination_reason: str
+    @property
+    def particle_id(self) -> int: ...
+    @property
+    def final_status(self) -> str: ...
+    @property
+    def termination_reason(self) -> str: ...
     def to_records(self) -> List[Dict[str, Any]]:
         """One dict per step, with the keys ``step``, ``time``, ``x``, ``y``,
         ``z``, ``vx``, ``vy``, ``vz``, ``cell_id`` and ``dt``."""
@@ -53,39 +91,63 @@ class TrajectoryResult:
     def __len__(self) -> int: ...
 
 
+@final
 class GridHandle:
+    def __new__(cls) -> GridHandle: ...
     def is_loaded(self) -> bool: ...
     def n_cells(self) -> int: ...
 
 
-class WaterlooFieldHandle:
+@final
+class VelocityFieldHandle:
+    def __new__(cls) -> VelocityFieldHandle: ...
     def is_loaded(self) -> bool: ...
     def method_name(self) -> str: ...
     def n_cells(self) -> int: ...
+    def velocity_at(self, x: float, y: float, z: float) -> Tuple[float, float, float]: ...
 
 
 # Alias — fit_sspa() and fit_waterloo() both return the same handle type.
-VelocityFieldHandle = WaterlooFieldHandle
+WaterlooFieldHandle = VelocityFieldHandle
 
 
+@final
 class SspaConfig:
-    def __init__(self, search_radius: float, krig_offset: float = 0.1) -> None: ...
+    def __new__(cls, search_radius: float = ..., krig_offset: float = ...) -> SspaConfig: ...
     @property
     def search_radius(self) -> float: ...
     @property
     def krig_offset(self) -> float: ...
 
 
+@final
 class SspaInputs:
     def n_cells(self) -> int: ...
+    def __len__(self) -> int: ...
+    @property
+    def heads(self) -> List[float]: ...
+    @property
+    def hydraulic_conductivity(self) -> List[float]: ...
+    @property
+    def hhk(self) -> List[float]: ...
+    @property
+    def porosity(self) -> List[float]: ...
+    @property
+    def well_mask(self) -> List[bool]: ...
 
 
 def hydrate_sspa_inputs(
     heads: npt.NDArray[np.float64],
     porosity: npt.NDArray[np.float64],
     well_mask: npt.NDArray[np.bool_],
-    hhk: npt.NDArray[np.float64],
-) -> SspaInputs: ...
+    hydraulic_conductivity: Optional[npt.NDArray[np.float64]] = None,
+    hhk: Optional[npt.NDArray[np.float64]] = None,
+) -> SspaInputs:
+    """Hydrate SSP&A field inputs from NumPy arrays.
+
+    Exactly one of hydraulic_conductivity or hhk must be provided.
+    """
+    ...
 
 
 def fit_sspa(
@@ -97,10 +159,12 @@ def fit_sspa(
     """Fit the SSP&A (kriging-based) velocity field.
 
     Consumes the GridHandle (it will no longer be loaded after the call).
+    If the inputs are rejected with ValueError, the GridHandle is left loaded.
     """
     ...
 
 
+@final
 class CellProperties:
     @property
     def top(self) -> List[float]: ...
@@ -123,6 +187,7 @@ class CellProperties:
     def n_cells(self) -> int: ...
 
 
+@final
 class CellFlows:
     @property
     def head(self) -> List[float]: ...
@@ -151,6 +216,7 @@ class CellFlows:
     def n_cells(self) -> int: ...
 
 
+@final
 class WaterlooInputs:
     def n_cells(self) -> int: ...
     def __len__(self) -> int: ...
@@ -179,14 +245,14 @@ def hydrate_cell_flows(
     q_other: npt.NDArray[np.float64],
     q_storage: npt.NDArray[np.float64],
     has_well: npt.NDArray[np.bool_],
-    face_offset: npt.NDArray[np.uint64],
+    face_offset: npt.NDArray[np.integer[Any]],
     face_flow: npt.NDArray[np.float64],
-    face_neighbor: npt.NDArray[np.int64],
+    face_neighbor: npt.NDArray[np.integer[Any]],
     # Optional boundary condition metadata (IFACE-based capture)
-    bc_cell_ids: Optional[npt.NDArray[np.int64]] = None,
-    bc_iface: Optional[npt.NDArray[np.int32]] = None,
+    bc_cell_ids: Optional[npt.NDArray[np.integer[Any]]] = None,
+    bc_iface: Optional[npt.NDArray[np.integer[Any]]] = None,
     bc_flow: Optional[npt.NDArray[np.float64]] = None,
-    bc_type_id: Optional[npt.NDArray[np.int32]] = None,
+    bc_type_id: Optional[npt.NDArray[np.integer[Any]]] = None,
     bc_type_names: Optional[List[str]] = None,
     is_domain_boundary: Optional[npt.NDArray[np.bool_]] = None,
     has_water_table: Optional[npt.NDArray[np.bool_]] = None,
@@ -214,6 +280,11 @@ def hydrate_cell_flows(
     For a cell whose budget closes, q_vert - q_storage equals
     sum(face_flow) + q_well + q_other for that cell.
 
+    Arrays: all 1-D, one value per cell (face_*: one per face row). The
+    float arrays must be float64 and the masks bool. The integer arrays
+    (face_offset, face_neighbor and the bc_* ids and codes) may have any
+    integer dtype; each value is checked to fit.
+
     See docs/reference/units-and-conventions.md for the full reference.
     """
     ...
@@ -227,7 +298,7 @@ def hydrate_waterloo_inputs(
     q_vert: npt.NDArray[np.float64],
     q_well: npt.NDArray[np.float64],
     q_other: npt.NDArray[np.float64],
-    face_offset: npt.NDArray[np.uint64],
+    face_offset: npt.NDArray[np.integer[Any]],
     face_vx1: npt.NDArray[np.float64],
     face_vy1: npt.NDArray[np.float64],
     face_vx2: npt.NDArray[np.float64],
@@ -248,6 +319,10 @@ def hydrate_waterloo_inputs(
       - q_vert: the same array as for hydrate_cell_flows, WITHOUT storage.
         fit_waterloo subtracts cell_flows.q_storage from it.
 
+    Arrays: centers_xy has shape (n_cells, 2); the others are 1-D, one value
+    per cell or per face row. The float arrays must be float64 and
+    noflow_mask bool; face_offset may have any integer dtype.
+
     See docs/reference/units-and-conventions.md for the full reference.
     """
     ...
@@ -265,12 +340,22 @@ def fit_waterloo(
     fit_inputs: WaterlooInputs,
     cell_properties: CellProperties,
     cell_flows: CellFlows,
-) -> WaterlooFieldHandle:
+    top_neighbor: Optional[List[Optional[int]]] = None,
+    bot_neighbor: Optional[List[Optional[int]]] = None,
+    nodes_per_layer: int = 0,
+) -> VelocityFieldHandle:
     """Fit the Waterloo velocity field.
 
     Consumes the GridHandle (it will no longer be loaded after the call).
+    If the inputs are rejected with ValueError, the GridHandle is left loaded.
     Well locations are derived automatically from cell_flows.has_well
     and the grid cell centres.
+
+    Vertical connectivity: top_neighbor and bot_neighbor give, for each
+    cell, the id of the cell above and below it (None at the top or bottom
+    of the model; both default to None for every cell). nodes_per_layer is
+    the number of cells per layer, 0 for a single layer; it must divide the
+    number of cells.
 
     Sign conventions: fit_inputs must use face_flow positive = INTO cell
     (same array as hydrate_cell_flows; q_well = raw MODFLOW sign).
@@ -297,5 +382,7 @@ def run_simulation(
       - Omitted / null: capture immediately on cell entry (strong sink).
       - A positive number (e.g. 0.5): capture only when within that
         distance of the cell centre (weak sink).
+
+    A particle whose cell_id is not a cell of the field raises ValueError.
     """
     ...

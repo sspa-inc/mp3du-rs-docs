@@ -73,7 +73,7 @@ cell_flows = mp3du.hydrate_cell_flows(
     q_other=q_other_array,         # other source/sink (n_cells,)
     q_storage=q_storage_array,     # storage flow, MODFLOW sign; zeros if steady (n_cells,)
     has_well=has_well_array,       # boolean well presence (n_cells,) bool
-    face_offset=face_offset,       # CSR row pointers (n_cells + 1,) uint64
+    face_offset=face_offset,       # CSR row pointers (n_cells + 1,), any integer dtype
     face_flow=face_flow_array,     # face flow rates (n_faces,) float64
     face_neighbor=face_nbr_array,  # face neighbor cell IDs (n_faces,) int64
 )
@@ -154,7 +154,7 @@ waterloo_inputs = mp3du.hydrate_waterloo_inputs(
     q_vert=q_vert,             # net vertical flow, without storage (n_cells,) float64
     q_well=q_well,             # well flux (n_cells,) float64
     q_other=q_other,           # other flux (n_cells,) float64
-    face_offset=face_offset,   # CSR row pointers (n_cells + 1,) uint64
+    face_offset=face_offset,   # CSR row pointers (n_cells + 1,), any integer dtype
     face_vx1=face_vx1,         # face velocity x-component, node 1 (n_faces,) float64
     face_vy1=face_vy1,         # face velocity y-component, node 1 (n_faces,) float64
     face_vx2=face_vx2,         # face velocity x-component, node 2 (n_faces,) float64
@@ -333,15 +333,21 @@ Each record dictionary from `to_records()` contains:
 !!! info "termination_reason"
     For `CapturedByWell` and `CapturedByBoundary`, `termination_reason`
     includes the BC type name from `bc_type_names`, e.g.,
-    `"Internal sink/source: CONSTANT HEAD"`. For other statuses it mirrors
-    `final_status`.
+    `"Internal sink/source: CONSTANT HEAD"` or `"Internal well: WELLS"`.
+    `CapturedAtModelEdge` gives `"Model Boundary"`, and the time limit gives
+    `"Time limit reached"`. For `ExitedDomain` and `SolverFailed` it is an
+    empty string, so test `final_status` rather than `termination_reason`.
 
 ## Error Handling
 
 Simulation errors are reported via the `final_status` field or raised as Python exceptions during setup. Common errors:
 
-- **Invalid configuration** — raised by `SimulationConfig.from_json()` or `validate()`
-- **Array shape mismatch** — raised by `hydrate_*` functions when array lengths don't match
+- **Invalid configuration** — `ValueError` from `SimulationConfig.from_json()` or `validate()`, including a key the configuration does not have (a misspelling)
+- **Array shape mismatch** — `ValueError` from the `hydrate_*` functions when array lengths don't match
+- **Wrong array dtype** — `TypeError` naming the argument and the dtype expected, for example a float array built from integers
+- **Inputs that do not match the grid** — `ValueError` from `fit_waterloo()` or `fit_sspa()`; the `GridHandle` stays loaded, so it can be passed again once the inputs are corrected
 - **Solver failure** — reported as `final_status = "SolverFailed"` in the trajectory result
+
+See [Error Diagnostics](../reference/error-diagnostics.md) for the messages.
 
 See [Error Diagnostics](../reference/error-diagnostics.md) for the full error catalog and [Troubleshooting](troubleshooting.md) for common problems and solutions.

@@ -100,7 +100,9 @@ whether the particle should be terminated. The checks follow a strict
 ### 1. Domain Boundary
 
 If `is_domain_boundary[cell] = True` **and** the cell has no IFACE 0 entry,
-the particle is terminated with status `CapturedAtModelEdge`.
+the particle is terminated with status `CapturedAtModelEdge`. The flag
+applies whether or not the `bc_*` arrays are given; before 0.1.4 it was
+ignored without them.
 
 ### 2. InternalWell (IFACE 0)
 

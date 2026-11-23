@@ -244,10 +244,12 @@ Before running a simulation, you can validate a configuration against the JSON S
 
 ```python
 import json
+import urllib.request
 import jsonschema
 
-with open("mp3du-rs/python/mp3du_schema.json") as f:
-    schema = json.load(f)
+schema_url = "https://sspa-inc.github.io/mp3du-rs-docs/assets/raw/mp3du_schema.json"
+with urllib.request.urlopen(schema_url) as response:
+    schema = json.load(response)
 
 config_dict = {
     "velocity_method": "Waterloo",
@@ -286,10 +288,15 @@ config = mp3du.SimulationConfig.from_json(json.dumps(config_dict))
 config.validate()  # raises ValueError if invalid; may issue a UserWarning
 ```
 
+`from_json()` makes the same checks as the schema for the structure of the configuration: since 0.1.4 it also rejects a key the configuration does not have, so the JSON Schema step is optional.
+
 ## Common Mistakes
 
-!!! warning "Direction must be exactly `1.0` or `-1.0`"
-    The schema uses an **enum** constraint, not a range. Integer values like `1` or `-1` are rejected. Fractional values like `0.5` are rejected. Use exactly `1.0` (forward) or `-1.0` (backward).
+!!! warning "Direction must be `1.0` or `-1.0`"
+    The schema uses an **enum** constraint, not a range. Values such as `0.5` or `2` are rejected. Use `1.0` (forward) or `-1.0` (backward); `1` and `-1` written as integers are the same values and are accepted.
+
+!!! warning "Misspelled keys are errors"
+    A key the configuration does not have, such as `capture_raduis`, raises ``ValueError: unknown field `capture_raduis`, expected one of ...``. Before 0.1.4 such a key was ignored, so a misspelled optional setting silently kept its default.
 
 !!! warning "`euler_dt` is not a step size"
     In the adaptive solvers `adaptive.euler_dt` is the threshold of the emergency Euler step, which makes it a floor on the step size. Set it equal to `adaptive.min_dt`. A value such as `1.0` or `0.1` forces first-order Euler steps of that size wherever the solver needs smaller ones, typically near wells. `from_json()` and `validate()` issue a `UserWarning` for it.

@@ -7,7 +7,7 @@
 - [ParticleStart](ParticleStart.md)
 - [TrajectoryResult](TrajectoryResult.md)
 - [GridHandle](GridHandle.md)
-- [WaterlooFieldHandle](WaterlooFieldHandle.md) (also aliased as `VelocityFieldHandle`)
+- [VelocityFieldHandle](WaterlooFieldHandle.md) (also available as `WaterlooFieldHandle`)
 - [CellProperties](CellProperties.md)
 - [CellFlows](CellFlows.md)
 - [WaterlooInputs](WaterlooInputs.md)

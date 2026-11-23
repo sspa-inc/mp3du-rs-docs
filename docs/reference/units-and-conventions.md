@@ -357,16 +357,29 @@ length (`n_bc_entries`):
 
 | Array | Dtype | Description |
 |-------|-------|-------------|
-| `bc_cell_ids` | `int64` | 0-based cell index for each BC entry |
-| `bc_iface` | `int32` | IFACE value (0, 2, 5, 6, or 7) |
+| `bc_cell_ids` | any integer | 0-based cell index for each BC entry |
+| `bc_iface` | any integer | IFACE value (0, 2, 5, 6, or 7) |
 | `bc_flow` | `float64` | Flow rate (raw MODFLOW sign) |
-| `bc_type_id` | `int32` | Index into `bc_type_names` |
+| `bc_type_id` | any integer | Index into `bc_type_names` |
 | `bc_type_names` | `List[str]` | Human-readable BC type names (e.g., `["CONSTANT HEAD", "WELLS"]`) |
 | `is_domain_boundary` | `bool` (n_cells) | `True` if cell is at the model domain edge |
 | `has_water_table` | `bool` (n_cells) | `True` if cell is unconfined/convertible |
 
 !!! info "`is_domain_boundary` and `has_water_table`"
-    These two arrays are per-cell (`n_cells`), not per-BC-entry.
+    These two arrays are per-cell (`n_cells`), not per-BC-entry. They may be
+    passed with or without the `bc_*` arrays. Before 0.1.4 they were ignored
+    unless the four `bc_*` arrays were also given.
+
+!!! info "Array dtypes"
+    Float arrays must be `float64` and masks (`has_well`, `noflow_mask`,
+    `is_domain_boundary`, `has_water_table`) `bool`. The integer arrays
+    (`face_offset`, `face_neighbor`, `bc_cell_ids`, `bc_iface` and
+    `bc_type_id`) may have any integer dtype, so arrays made with NumPy's
+    default integer type can be passed as they are; each value is checked
+    against the range it must fit, and one that does not (a negative
+    `face_offset`, for example) raises `ValueError`. Before 0.1.4,
+    `face_offset` had to be `uint64`, `face_neighbor` and `bc_cell_ids`
+    `int64`, and `bc_iface` and `bc_type_id` `int32`.
 
 ### Face connectivity (CSR layout)
 
@@ -391,6 +404,8 @@ The `face_offset` array must:
 - Start with `0`
 - Be non-decreasing
 - End with the total number of face entries
+
+It may have any integer dtype (see Array dtypes above).
 
 ---
 

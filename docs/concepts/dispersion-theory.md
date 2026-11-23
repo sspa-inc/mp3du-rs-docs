@@ -8,7 +8,7 @@ In groundwater flow, **mechanical dispersion** causes solute particles to spread
 
 Two dispersion formulations are available:
 
-- **GSDE** — The Generalized Stochastic Differential Equation method (LaBolle et al., 1996, 2000)
+- **GSDE** — The Generalized Stochastic Differential Equation method (LaBolle et al., 2000, eqs. 17a–17c)
 - **Ito** — The Itô–Fokker–Planck formulation with explicit drift correction (Salamon et al., 2006)
 
 Setting `"method": "None"` disables dispersion entirely, producing pure advective tracking.
@@ -30,18 +30,18 @@ where:
 - $V_i, V_j$ — components of the velocity vector
 
 !!! info "Three dispersivity parameters"
-    mod-PATH3DU distinguishes **horizontal transverse** ($\alpha_{Th}$) and **vertical transverse** ($\alpha_{Tv}$) dispersivity, giving three parameters: `alpha_l`, `alpha_th`, and `alpha_tv`. The full 3D tensor uses a velocity-aligned reference frame to apply horizontal and vertical transverse dispersivities independently.
+    mod-PATH3DU distinguishes **horizontal transverse** ($\alpha_{Th}$) and **vertical transverse** ($\alpha_{Tv}$) dispersivity, giving three parameters: `alpha_l`, `alpha_th`, and `alpha_tv`. The tensor then has the flow direction, a horizontal transverse direction and a vertical transverse direction as its principal axes; [Dispersion Methods](../reference/dispersion-methods.md#dispersion-tensor) gives its components.
 
-The dispersion tensor is decomposed as $\mathbf{D} = \mathbf{B} \mathbf{B}^T$ where $\mathbf{B}$ is computed from a **velocity-aligned reference frame**. The primary axis aligns with $\mathbf{V}$, and the secondary axes are constructed to separate horizontal and vertical transverse directions.
+The random step uses a matrix $\mathbf{B}$ with $\mathbf{B} \mathbf{B}^T = 2\mathbf{D}$, built from these principal axes.
 
 ## GSDE Formulation
 
 ### Governing Equation
 
-The GSDE method (LaBolle et al., 1996) uses a two-step predictor scheme:
+A random walk reproduces the advection-dispersion equation only when a drift is added to the random step:
 
 $$
-d\mathbf{X} = \mathbf{V}(\mathbf{X}, t) \, dt + \mathbf{B}(\mathbf{X}, t) \, d\mathbf{W}
+d\mathbf{X} = \left[\mathbf{V}(\mathbf{X}, t) + \theta^{-1}\nabla \cdot (\theta\mathbf{D})\right] dt + \mathbf{B}(\mathbf{X}, t) \, d\mathbf{W}
 $$
 
 where:
@@ -50,25 +50,28 @@ where:
 |--------|---------|
 | $\mathbf{X}$ | Particle position vector |
 | $\mathbf{V}$ | Deterministic velocity at the particle location |
-| $\mathbf{B}$ | Dispersion matrix satisfying $\mathbf{D} = \mathbf{B}\mathbf{B}^T$ |
+| $\theta$ | Porosity |
+| $\mathbf{B}$ | Dispersion matrix satisfying $\mathbf{B}\mathbf{B}^T = 2\mathbf{D}$ |
 | $d\mathbf{W}$ | Wiener process increment ($\sim \mathcal{N}(0, dt)$) |
 
-### Two-Step Predictor
+Without the drift, particles collect where dispersion is low.
 
-The key advantage of the GSDE is that it **eliminates the need for explicit computation of $\nabla \cdot \mathbf{D}$** — the divergence of the dispersion tensor. This term is notoriously difficult to compute numerically and can introduce large errors at material interfaces (e.g., boundaries between geological units with different dispersivities).
+### Drift Without Gradients
 
-The GSDE achieves this through a two-step scheme:
+The key advantage of the GSDE is that it **does not compute $\nabla \cdot \mathbf{D}$** — the divergence of the dispersion tensor. This term is difficult to compute numerically and is undefined at material interfaces (e.g., boundaries between geological units with different dispersivities).
 
-1. **Predictor step:** Advance the particle to an intermediate position using the dispersion at the current location
-2. **Corrector step:** Evaluate dispersion at the intermediate position and combine with the predictor to implicitly capture the drift correction
+The GSDE of LaBolle et al. (2000) instead evaluates the dispersion at trial points reached with the **same** random numbers as the step itself: a trial point $\mathbf{X} + \mathbf{S}(\mathbf{X})\Delta\mathbf{W}$, and one point along each principal direction of $\mathbf{D}$, where $\mathbf{S}$ is the symmetric square root of $2\mathbf{D}$. Combining the dispersion at these points, weighted by the ratio of porosities, gives a step whose mean is exactly the drift $\theta^{-1}\nabla \cdot (\theta\mathbf{D})\,\Delta t$, and whose spread is $2\mathbf{D}\,\Delta t$. mod-PATH3DU 2.1.9 (November 2026) and MP3DU-RS 0.1.5 implement their anisotropic form, eqs. 17a–17c; the equations are on the [Dispersion Methods](../reference/dispersion-methods.md#mathematical-formulation) page.
 
-This eliminates the artificial particle accumulation at material interfaces that plagues simpler random-walk methods.
+!!! warning "Changed in 0.1.5"
+    Earlier versions drew the second step from independent random numbers, which removes the drift. Results with dispersion from earlier versions should be recomputed.
 
 ### Implementation Details
 
 - Random numbers are generated using a **deterministic ChaCha8 RNG** seeded by particle ID, ensuring reproducibility
-- Each particle receives an independent random stream
+- Each particle receives an independent random stream, and one random vector drives all the trial points of a step
 - The Wiener increment is drawn from $\mathcal{N}(0, \Delta t)$ per dimension
+- Trial points are located by position, in the particle's layer or in the layer above or below
+- In backward tracking the dispersive displacement keeps its direction, while advection reverses
 
 ## Ito Formulation
 
@@ -80,7 +83,7 @@ $$
 d\mathbf{X} = \left(\mathbf{V} + \nabla \cdot \mathbf{D}\right) dt + \mathbf{B} \, d\mathbf{W}
 $$
 
-The additional drift correction $\nabla \cdot \mathbf{D}$ ensures that the particle density evolves according to the Fokker–Planck equation — the correct macroscopic transport equation.
+The additional drift correction $\nabla \cdot \mathbf{D}$ ensures that the particle density evolves according to the Fokker–Planck equation — the correct macroscopic transport equation. MP3DU-RS takes the porosity as uniform here; where it varies, the drift is $\theta^{-1}\nabla \cdot (\theta\mathbf{D})$, which the GSDE produces.
 
 ### Drift Correction
 
@@ -100,7 +103,7 @@ $$
 \frac{\partial D_{ij}}{\partial x_j} \approx \frac{D_{ij}(\mathbf{x} + h\mathbf{e}_j) - D_{ij}(\mathbf{x} - h\mathbf{e}_j)}{2h}
 $$
 
-This requires **6 additional velocity evaluations** per time step (2 per spatial dimension: $\pm h$ in $x$, $y$, and $z$), making the Ito method more computationally expensive than the GSDE.
+This requires **6 additional velocity evaluations** per time step for the differences (2 per spatial dimension: $\pm h$ in $x$, $y$, and $z$), besides the evaluations at the particle, making the Ito method more computationally expensive than the GSDE. The differences straddle cell faces where the velocity can jump, which the GSDE avoids.
 
 ### Ito vs. Stratonovich
 
@@ -115,9 +118,9 @@ mod-PATH3DU uses the **Itô convention** because it pairs naturally with the exp
 
 | Property | GSDE | Ito |
 |----------|------|-----|
-| Drift correction | Implicit (two-step) | Explicit ($\nabla \cdot \mathbf{D}$) |
+| Drift correction | From trial points ($\theta^{-1}\nabla \cdot (\theta\mathbf{D})$) | Explicit ($\nabla \cdot \mathbf{D}$) |
 | Spatial gradient of $\mathbf{D}$ required | No | Yes |
-| Extra velocity evaluations per step | 0 | 6 |
+| Extra velocity evaluations per step | Up to 5 | 8 |
 | Material interface handling | Robust | Requires care |
 | Computational cost | Lower | Higher |
 | Accuracy | High | High |

@@ -1,8 +1,9 @@
 """
 Run mp3du-rs (Rust) SSP&A particle tracking on Example 5a — MEUK Equivalent.
 
-This script validates the Rust SSP&A (kriging-based) velocity engine against
-the legacy C++ MEUK outputs.  It uses the same model inputs as the C++ run:
+This script validates MP3DU-RS against mod-PATH3DU 2.1.9 (C++) on the MEUK model,
+with GSDE dispersion (LaBolle et al. 2000).  It uses the same model inputs as the
+C++ run:
 
   - 201×201 structured grid (100 m cells), single layer.
   - Hydraulic conductivity = 100 m/d (constant).
@@ -12,9 +13,30 @@ the legacy C++ MEUK outputs.  It uses the same model inputs as the C++ run:
   - 144 particles from PartStart_Intersect.shp, repeated N times.
   - Three endpoint simulations at 5044, 23363, and 50000 days.
 
-Validation compares Rust endpoint concentrations against C++ reference
-shapefiles (MEUK_05044.shp, MEUK_23363.shp, MEUK_50000.shp) using Pearson
-correlation, normalized RMSE, and captured-mass error.
+Each end time is run with two tracking set-ups (select with MP3DU_SETUPS):
+
+  - cpp_input:  as the mod-PATH3DU input Ex4_MEUK.json (step-doubling
+                Runge-Kutta, no practical step limit), like for like with the
+                reference;
+  - dopri_1000: Dormand-Prince with a 1,000-day step limit.
+
+Validation converts the Rust endpoints to concentrations the way the C++
+reference was made (writeUCNs.for) and compares them with the reference
+concentrations in meuk_reference_concentrations.csv, made with mod-PATH3DU 2.1.9
+(November 2026 build, with the GSDE fix) from Ex4_MEUK.json as published
+(5,000 repeats):
+
+  - Only particles still in the aquifer at the end time are binned.  Particles
+    captured by the wells are left out, as in the C++ reference, which shows the
+    mass still in the aquifer.  The number excluded per status is printed.
+  - Concentration = count x mass per particle / pore volume.  Pore volume =
+    head x cell area x porosity, from the MODFLOW heads.  Mass per particle =
+    the mean pore volume of the 3×3 source block x 1000, divided by
+    5000 repeats x 16 particles per cell.  Counts are scaled to 5000 repeats
+    when N_REPEATS differs.
+  - Pearson r and normalized RMSE are computed on the concentrations.
+  - Mass in the aquifer = sum of concentration x pore volume over all cells.
+    The mass error is (Rust - C++) / C++ of that quantity.
 
 Input files (all in this directory):
   mp3du.gsf                  Grid geometry (mod-PATH3DU v1.1.0 GSF format)
@@ -22,14 +44,16 @@ Input files (all in this directory):
   MEUK_WELLS.csv             Three extraction wells (NAME, X, Y, TERM, EVENT, VAL)
   PartStart_Intersect.shp    144 particle starting locations
 
-Reference files (in ../Shapefiles/):
-  MEUK_05044.shp             C++ concentration grid at t=5044 d
-  MEUK_23363.shp             C++ concentration grid at t=23363 d
-  MEUK_50000.shp             C++ concentration grid at t=50000 d
+MODFLOW file (in ../01-MODFLOW/):
+  dispdemoWEL.hds            MODFLOW binary heads, used for the pore volumes
+
+Reference file (download it into this directory, next to this script):
+  meuk_reference_concentrations.csv
+                             mod-PATH3DU concentrations at 5044, 23363 and 50000 d
 
 Requirements:
   Python packages: numpy, pyshp (shapefile), matplotlib
-  Native package:  mp3du (built via ``maturin develop --release``)
+  mp3du 0.1.5 or later (pip install the wheel from the GitHub releases)
 """
 import csv
 import json
@@ -43,7 +67,7 @@ import mp3du
 
 # ── Configuration ─────────────────────────────────────────────────────
 MODEL_WS = os.path.dirname(os.path.abspath(__file__))
-SHAPEFILE_DIR = os.path.join(os.path.dirname(MODEL_WS), "Shapefiles")
+HEADS_FILE = os.path.join(os.path.dirname(MODEL_WS), "01-MODFLOW", "dispdemoWEL.hds")
 
 # Grid constants (from Ex4_MEUK.json / gsf.json)
 NCOLS = 201
@@ -65,10 +89,25 @@ DISP_TRANSVERSE_H = 10.0       # m
 
 # Simulation configurations (from Ex4_MEUK.json)
 SIMULATIONS = [
-    {"name": "day05044_v2", "end_time": 5044.0, "ref_shp": "MEUK_05044"},
-    {"name": "day23363_v2", "end_time": 23363.0, "ref_shp": "MEUK_23363"},
-    {"name": "day50000_v2", "end_time": 50000.0, "ref_shp": "MEUK_50000"},
+    {"name": "day05044_v2", "end_time": 5044.0, "ref_column": "conc_05044"},
+    {"name": "day23363_v2", "end_time": 23363.0, "ref_column": "conc_23363"},
+    {"name": "day50000_v2", "end_time": 50000.0, "ref_column": "conc_50000"},
 ]
+
+# Tracking set-ups. mod-PATH3DU made the reference with the defaults of
+# Ex4_MEUK.json: its step-doubling Runge-Kutta and a step limit of 1e6 days.
+SETUPS = {
+    "cpp_input": {"label": "as the mod-PATH3DU input (step-doubling Runge-Kutta, no step limit)",
+                  "solver": "Rk4StepDoubling", "max_dt": 1.0e6},
+    "dopri_1000": {"label": "Dormand-Prince, 1,000-day step limit",
+                   "solver": "DormandPrince", "max_dt": 1000.0},
+}
+SETUP_NAMES = [s for s in os.environ.get("MP3DU_SETUPS", "cpp_input,dopri_1000").split(",") if s]
+
+# mod-PATH3DU reference concentrations, in this directory
+REFERENCE_CSV = os.path.join(MODEL_WS, "meuk_reference_concentrations.csv")
+REFERENCE_URL = ("https://sspa-inc.github.io/mp3du-rs-docs/examples/sspa-meuk-example/"
+                 "meuk_reference_concentrations.csv")
 
 CAPTURE_RADIUS = 150.0   # well capture radius (m) — matches C++
 INITIAL_DT = 0.1         # days
@@ -77,6 +116,19 @@ ADAPTIVE_TOL = 1.0e-6
 # Number of repeat realizations.  Start small (100) for fast validation;
 # scale to 5000 to match the full C++ run.
 N_REPEATS = int(os.environ.get("MP3DU_REPEATS", "100"))
+
+# C++ reference concentrations (writeUCNs.for)
+REF_REPEATS = 5000             # repeats per particle in the C++ run
+PARTICLES_PER_CELL = 16        # particles released per source cell in the C++ run
+INIT_CONC = 1000.0             # initial concentration in the source cells
+SOURCE_ROWS = slice(99, 102)   # source block: rows 100-102 (1-based, from the top)
+SOURCE_COLS = slice(18, 21)    #               cols 19-21 (1-based)
+HEADS_HEADER_BYTES = 44        # MODFLOW heads record header before the head array
+
+# Final statuses of particles that are still in the aquifer at the end time.
+# Particles captured by a well, boundary or zone, or that left the model, are
+# not binned: the C++ reference does not count captured particles.
+AQUIFER_STATUSES = ("TimeLimitReached", "Stagnated")
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -208,23 +260,88 @@ def read_wells_csv(path):
 
 
 # ──────────────────────────────────────────────────────────────────────
-# 4. Load reference concentrations from C++ shapefile
+# 4. Load the mod-PATH3DU reference concentrations
 # ──────────────────────────────────────────────────────────────────────
 
-def load_reference_concentration(shp_basename):
-    """Load reference concentration grid from a MEUK_*.shp file.
+def load_reference_concentrations(path, n_cells):
+    """Load the reference concentrations from meuk_reference_concentrations.csv.
+
+    The file lists the cells with any concentration; lines starting with '#'
+    describe how it was made.
 
     Returns
     -------
-    conc : np.ndarray, shape (nrows * ncols,)
-        Concentration per cell in row-major order (row 1 col 1 first).
+    ref : dict[str, np.ndarray]
+        Simulation name -> concentration per cell, shape (n_cells,), in GSF
+        cell order (row 0 = bottom).
     """
-    sf = shapefile.Reader(shp_basename)
-    n = len(sf)
-    conc = np.zeros(n, dtype=np.float64)
-    for i, rec in enumerate(sf.iterRecords()):
-        conc[i] = rec["concentrat"]
-    return conc
+    if not os.path.exists(path):
+        raise FileNotFoundError(
+            f"{path} not found. Download it from {REFERENCE_URL} into this directory.")
+    with open(path, newline="", encoding="utf-8") as f:
+        rows = list(csv.reader(line for line in f if not line.startswith("#")))
+    header, body = rows[0], rows[1:]
+    cell = np.array([int(r[header.index("gsf_cell")]) for r in body])
+    ref = {}
+    for sim in SIMULATIONS:
+        k = header.index(sim["ref_column"])
+        conc = np.zeros(n_cells, dtype=np.float64)
+        conc[cell] = [float(r[k]) for r in body]
+        ref[sim["name"]] = conc
+    return ref
+
+
+# ──────────────────────────────────────────────────────────────────────
+# 4b. Pore volumes and mass per particle (as in writeUCNs.for)
+#
+# The C++ reference concentration of a cell is
+#   count x mass per particle / pore volume
+# with the pore volume taken from the MODFLOW heads (bottom elevation 0).
+# ──────────────────────────────────────────────────────────────────────
+
+def read_modflow_heads(path):
+    """Read the MODFLOW binary heads file (one layer, one time).
+
+    The file has a 44-byte record header followed by NROWS*NCOLS float32
+    values, row 1 (north) first.
+
+    Returns
+    -------
+    heads : np.ndarray, shape (nrows, ncols)
+        Row 0 = top (north), as stored in the file.
+    """
+    with open(path, "rb") as f:
+        f.seek(HEADS_HEADER_BYTES)
+        heads = np.fromfile(f, dtype="<f4", count=NROWS * NCOLS)
+    if heads.size != NROWS * NCOLS:
+        raise ValueError(f"{path}: expected {NROWS * NCOLS} head values, got {heads.size}")
+    return heads.reshape(NROWS, NCOLS).astype(np.float64)
+
+
+def pore_volume_and_mass_per_particle(heads):
+    """Compute the cell pore volumes and the mass carried by one particle.
+
+    pore volume = (head - 0) x cell area x porosity
+    mass per particle = mean over the source block of (pore volume x INIT_CONC),
+                        divided by (REF_REPEATS x PARTICLES_PER_CELL)
+
+    Parameters
+    ----------
+    heads : np.ndarray, shape (nrows, ncols)
+        Heads as stored in the file, row 0 = top (north).
+
+    Returns
+    -------
+    pore_volume : np.ndarray, shape (n_cells,)
+        Pore volume per cell in GSF cell order (row 0 = bottom).
+    mass_per_particle : float
+        Mass of one particle for a run of REF_REPEATS repeats.
+    """
+    volume = heads * CELLSIZE * CELLSIZE * POROSITY
+    source_mass = (volume[SOURCE_ROWS, SOURCE_COLS] * INIT_CONC).mean()
+    mass_per_particle = source_mass / (REF_REPEATS * PARTICLES_PER_CELL)
+    # Same row reversal as for the ASC heads and the reference shapefile.
+    return np.flipud(volume).flatten(), mass_per_particle
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -273,10 +390,12 @@ def build_cell_to_rc(gsf_cells):
 # ──────────────────────────────────────────────────────────────────────
 
 def bin_endpoints(results, cell_row, cell_col, n_cells):
-    """Bin simulation endpoints into a per-cell concentration array.
+    """Bin the endpoints of particles still in the aquifer into a per-cell count array.
 
     Uses the cell_id from the last trajectory record (the endpoint)
     and maps it to a grid cell via the pre-built cell→(row,col) table.
+    Only particles whose final status is in AQUIFER_STATUSES are binned;
+    captured particles and particles that left the model are excluded.
 
     Parameters
     ----------
@@ -286,46 +405,65 @@ def bin_endpoints(results, cell_row, cell_col, n_cells):
 
     Returns
     -------
-    conc : np.ndarray, shape (n_cells,)
+    counts : np.ndarray, shape (n_cells,)
         Count of endpoints per cell.
+    excluded : dict[str, int]
+        Number of particles not binned, per final status.  Particles in the
+        aquifer without a valid endpoint cell are listed as "NoValidCell".
     """
-    conc = np.zeros(n_cells, dtype=np.float64)
+    counts = np.zeros(n_cells, dtype=np.float64)
+    excluded = {}
     for r in results:
-        records = r.to_records()
-        if not records:
+        if r.final_status not in AQUIFER_STATUSES:
+            excluded[r.final_status] = excluded.get(r.final_status, 0) + 1
             continue
-        last = records[-1]
-        cid = last["cell_id"]
+        records = r.to_records()
+        cid = records[-1]["cell_id"] if records else -1
         if 0 <= cid < n_cells:
-            conc[cid] += 1.0
-    return conc
+            counts[cid] += 1.0
+        else:
+            excluded["NoValidCell"] = excluded.get("NoValidCell", 0) + 1
+    return counts, excluded
+
+
+def counts_to_concentration(counts, pore_volume, mass_per_particle):
+    """Convert endpoint counts to concentrations, as writeUCNs.for does.
+
+    The counts are scaled from N_REPEATS to REF_REPEATS repeats first.
+    concentration = count x mass per particle / pore volume
+    """
+    scale = REF_REPEATS / N_REPEATS
+    return counts * scale * mass_per_particle / pore_volume
 
 
 # ──────────────────────────────────────────────────────────────────────
 # 7. Validation metrics
 # ──────────────────────────────────────────────────────────────────────
 
-def compute_metrics(rust_conc, ref_conc):
+def compute_metrics(rust_conc, ref_conc, pore_volume):
     """Compute comparison metrics between two concentration arrays.
+
+    Both arrays are concentrations per cell in the same (GSF) cell order;
+    pore_volume is the pore volume per cell in that order.
 
     Returns
     -------
     dict with keys:
-        pearson_r       – Pearson correlation coefficient
-        nrmse           – Normalized RMSE (relative to reference range)
-        mass_error_pct  – Captured-mass error as a percentage
-        rust_total      – Total concentration (Rust)
-        ref_total       – Total concentration (reference)
+        pearson_r       – Pearson correlation coefficient of the concentrations
+        nrmse           – Normalized RMSE of the concentrations (relative to reference range)
+        mass_error_pct  – Error in the mass in the aquifer, (Rust - C++) / C++, as a percentage
+        rust_mass       – Mass in the aquifer (Rust): sum of concentration x pore volume
+        ref_mass        – Mass in the aquifer (reference): sum of concentration x pore volume
     """
     metrics = {}
 
-    ref_total = ref_conc.sum()
-    rust_total = rust_conc.sum()
-    metrics["ref_total"] = ref_total
-    metrics["rust_total"] = rust_total
+    ref_mass = (ref_conc * pore_volume).sum()
+    rust_mass = (rust_conc * pore_volume).sum()
+    metrics["ref_mass"] = ref_mass
+    metrics["rust_mass"] = rust_mass
 
-    if ref_total > 0:
-        metrics["mass_error_pct"] = 100.0 * (rust_total - ref_total) / ref_total
+    if ref_mass > 0:
+        metrics["mass_error_pct"] = 100.0 * (rust_mass - ref_mass) / ref_mass
     else:
         metrics["mass_error_pct"] = 0.0
 
@@ -484,6 +622,13 @@ def main():
         f"Heads count {heads_flat.shape[0]} != GSF cells {n_cells}"
     )
 
+    # ── 3b. Read MODFLOW heads (pore volumes, mass per particle) ──────
+    print("Reading MODFLOW heads (pore volumes)...")
+    modflow_heads = read_modflow_heads(HEADS_FILE)
+    pore_volume, mass_per_particle = pore_volume_and_mass_per_particle(modflow_heads)
+    print(f"  Heads range: [{modflow_heads.min():.4f}, {modflow_heads.max():.4f}]  "
+          f"Mass per particle ({REF_REPEATS} repeats): {mass_per_particle:.2f}")
+
     # ── 4. Read well drifts ───────────────────────────────────────────
     wells_path = os.path.join(MODEL_WS, "MEUK_WELLS.csv")
     print("Reading well drifts...")
@@ -548,213 +693,157 @@ def main():
     # ── 8. Build cell→(row,col) mapping for endpoint binning ─────────
     cell_row, cell_col = build_cell_to_rc(gsf_cells)
 
-    # ── 9. Run simulations ────────────────────────────────────────────
-    # Build particles with REPEAT realizations (each base particle is
-    # replicated N_REPEATS times with unique IDs).
-    all_metrics = {}
-    all_results = {}           # sim_name -> list[TrajectoryResult]
-    all_trajectories = {}      # sim_name -> list of [(x,y),...] for first repeat
+    # ── 9. Reference concentrations ──────────────────────────────────
+    ref_by_sim = load_reference_concentrations(REFERENCE_CSV, n_cells)
+    ref_total = REF_REPEATS * len(base_particles)   # particles per end time in the reference
 
-    for sim in SIMULATIONS:
-        sim_name = sim["name"]
-        end_time = sim["end_time"]
-        ref_shp = sim["ref_shp"]
-        print(f"\n{'='*60}")
-        print(f"Simulation: {sim_name}  (t_end = {end_time} d, repeats = {N_REPEATS})")
-        print(f"{'='*60}")
+    # ── 10. Run simulations ───────────────────────────────────────────
+    # Each base particle is replicated N_REPEATS times with unique IDs.
+    particles = []
+    pid = 0
+    for _rep in range(N_REPEATS):
+        for bp in base_particles:
+            particles.append(mp3du.ParticleStart(
+                id=pid,
+                x=bp["x"],
+                y=bp["y"],
+                z=bp["z"],
+                cell_id=bp["cell_id"],
+                initial_dt=INITIAL_DT,
+            ))
+            pid += 1
+    total_particles = len(particles)
 
-        # Build simulation config
-        config_dict = {
-            "velocity_method": "Waterloo",
-            "solver": "DormandPrince",
-            "adaptive": {
-                "tolerance": ADAPTIVE_TOL,
-                "safety": 0.9,
-                "alpha": 0.2,
-                "min_scale": 0.2,
-                "max_scale": 5.0,
-                "max_rejects": 10,
-                "min_dt": 1e-10,
-                "euler_dt": 1e-20,
-            },
-            "dispersion": {
-                "method": "Ito",
-                "alpha_l": DISP_LONGITUDINAL,
-                "alpha_th": DISP_TRANSVERSE_H,
-                "alpha_tv": 0.0,
-            },
-            "retardation_enabled": RETARDATION != 1.0,
-            "capture": {
-                "max_time": end_time,
-                "max_steps": 2_000_000,
-                "stagnation_velocity": 1e-12,
-                "stagnation_limit": 100,
-                "capture_radius": CAPTURE_RADIUS,
-            },
-            "initial_dt": INITIAL_DT,
-            "max_dt": 1000.0,
-            "direction": 1.0,
-        }
-        config = mp3du.SimulationConfig.from_json(json.dumps(config_dict))
+    all_metrics = {}           # (setup, sim_name) -> metrics
+    all_results = {}           # (setup, sim_name) -> list[TrajectoryResult]
+    all_trajectories = {}      # sim_name -> list of [(x,y),...], first repeat, first set-up
 
-        # Build repeated particle list
-        particles = []
-        pid = 0
-        for _rep in range(N_REPEATS):
-            for bp in base_particles:
-                particles.append(mp3du.ParticleStart(
-                    id=pid,
-                    x=bp["x"],
-                    y=bp["y"],
-                    z=bp["z"],
-                    cell_id=bp["cell_id"],
-                    initial_dt=INITIAL_DT,
-                ))
-                pid += 1
+    for setup_name in SETUP_NAMES:
+        setup = SETUPS[setup_name]
+        for sim in SIMULATIONS:
+            sim_name = sim["name"]
+            end_time = sim["end_time"]
+            print(f"\n{'='*60}")
+            print(f"Set-up {setup_name}: {setup['label']}")
+            print(f"Simulation: {sim_name}  (t_end = {end_time} d, repeats = {N_REPEATS})")
+            print(f"{'='*60}")
 
-        total_particles = len(particles)
-        print(f"  Total particles: {total_particles} "
-              f"({len(base_particles)} base × {N_REPEATS} repeats)")
+            config_dict = {
+                "velocity_method": "Waterloo",
+                "solver": setup["solver"],
+                "adaptive": {
+                    "tolerance": ADAPTIVE_TOL,
+                    "safety": 0.9,
+                    "alpha": 0.2,
+                    "min_scale": 0.2,
+                    "max_scale": 5.0,
+                    "max_rejects": 10,
+                    "min_dt": 1e-10,
+                    "euler_dt": 1e-10,
+                },
+                "dispersion": {
+                    "method": "Gsde",
+                    "alpha_l": DISP_LONGITUDINAL,
+                    "alpha_th": DISP_TRANSVERSE_H,
+                    "alpha_tv": 0.0,
+                },
+                "retardation_enabled": RETARDATION != 1.0,
+                "capture": {
+                    "max_time": end_time,
+                    "max_steps": 2_000_000,
+                    "stagnation_velocity": 1e-12,
+                    "stagnation_limit": 100,
+                    "capture_radius": CAPTURE_RADIUS,
+                },
+                "initial_dt": INITIAL_DT,
+                "max_dt": setup["max_dt"],
+                "direction": 1.0,
+            }
+            config = mp3du.SimulationConfig.from_json(json.dumps(config_dict))
+            print(f"  Total particles: {total_particles} "
+                  f"({len(base_particles)} base × {N_REPEATS} repeats)")
 
-        # Run
-        t0 = time.perf_counter()
-        results = mp3du.run_simulation(config, field, particles, parallel=True)
-        dt_sim = time.perf_counter() - t0
-        print(f"  Simulation complete: {len(results)} trajectories  ({dt_sim:.1f} s)")
-        all_results[sim_name] = results
+            t0 = time.perf_counter()
+            results = mp3du.run_simulation(config, field, particles, parallel=True)
+            dt_sim = time.perf_counter() - t0
+            print(f"  Simulation complete: {len(results)} trajectories  ({dt_sim:.1f} s)")
+            all_results[(setup_name, sim_name)] = results
 
-        # Collect particle paths for first repeat only (for head-contour plot)
-        n_base = len(base_particles)
-        paths = []
-        for r in results[:n_base]:
-            recs = r.to_records()
-            if recs:
-                paths.append([(rec["x"], rec["y"]) for rec in recs])
-        all_trajectories[sim_name] = paths
+            # Particle paths of the first repeat, first set-up (head-contour plot)
+            if setup_name == SETUP_NAMES[0]:
+                all_trajectories[sim_name] = [
+                    [(rec["x"], rec["y"]) for rec in r.to_records()]
+                    for r in results[:len(base_particles)] if len(r) > 0
+                ]
 
-        # Summarise termination statuses
-        status_counts = {}
-        for r in results:
-            status_counts[r.final_status] = status_counts.get(r.final_status, 0) + 1
-        for status, count in sorted(status_counts.items()):
-            print(f"    {status}: {count}")
+            # Bin the endpoints of particles still in the aquifer and convert
+            # the counts to concentrations
+            rust_counts, excluded = bin_endpoints(results, cell_row, cell_col, n_cells)
+            print(f"  Particles binned (still in the aquifer): "
+                  f"{int(rust_counts.sum())} of {total_particles}")
+            for status, count in sorted(excluded.items()):
+                print(f"    excluded, {status}: {count}")
+            rust_conc = counts_to_concentration(rust_counts, pore_volume, mass_per_particle)
 
-        # Bin endpoints into concentration grid
-        rust_conc = bin_endpoints(results, cell_row, cell_col, n_cells)
-        print(f"  Non-zero cells (Rust): {(rust_conc > 0).sum()}")
+            metrics = compute_metrics(rust_conc, ref_by_sim[sim_name], pore_volume)
+            metrics["rust_fraction"] = rust_counts.sum() / total_particles
+            metrics["ref_fraction"] = metrics["ref_mass"] / (mass_per_particle * ref_total)
+            all_metrics[(setup_name, sim_name)] = metrics
 
-        # Load reference
-        ref_path = os.path.join(SHAPEFILE_DIR, ref_shp)
-        if os.path.exists(ref_path + ".shp"):
-            print(f"  Loading reference: {ref_shp}.shp")
-            ref_conc = load_reference_concentration(ref_path)
+            print(f"\n  Validation metrics vs mod-PATH3DU (concentrations):")
+            print(f"    Fraction in aquifer:      {metrics['rust_fraction']:.4f}  "
+                  f"(mod-PATH3DU {metrics['ref_fraction']:.4f})")
+            print(f"    Pearson r:                {metrics['pearson_r']:.4f}")
+            print(f"    Norm. RMSE:               {metrics['nrmse']:.4f}")
+            print(f"    Mass in aquifer error:    {metrics['mass_error_pct']:+.2f}%  "
+                  f"((Rust - C++) / C++)")
 
-            # The reference shapefile stores cells in row-major order with
-            # row 1 = top of grid.  The GSF cell-index ordering has row 0 =
-            # bottom.  We need to remap the reference to match GSF order.
-            # Reference: row i, col j -> flat index (i-1)*ncols + (j-1)
-            # where row 1 is the TOP (north).  GSF: row 0 is BOTTOM (south).
-            # So reference row r (1-based top) maps to GSF row (nrows - r).
-            ref_reordered = np.zeros(n_cells, dtype=np.float64)
-            for i in range(NROWS):
-                for j in range(NCOLS):
-                    # Reference flat index: row i (0-based from top), col j
-                    ref_idx = i * NCOLS + j
-                    # GSF row = (NROWS - 1 - i), col = j  -> GSF flat index
-                    gsf_idx = (NROWS - 1 - i) * NCOLS + j
-                    ref_reordered[gsf_idx] = ref_conc[ref_idx]
-
-            # Scale Rust concentration to match reference particle count
-            # (reference used 5000 repeats × 144 particles)
-            if N_REPEATS != 5000:
-                scale = 5000.0 / N_REPEATS
-                rust_conc_scaled = rust_conc * scale
-                print(f"  Scaling Rust concentrations by {scale:.1f}x "
-                      f"(normalising {N_REPEATS} -> 5000 repeats)")
-            else:
-                rust_conc_scaled = rust_conc
-
-            metrics = compute_metrics(rust_conc_scaled, ref_reordered)
-            all_metrics[sim_name] = metrics
-
-            print(f"\n  Validation metrics vs C++ reference:")
-            print(f"    Pearson r:      {metrics['pearson_r']:.4f}")
-            print(f"    Norm. RMSE:     {metrics['nrmse']:.4f}")
-            print(f"    Mass error:     {metrics['mass_error_pct']:+.2f}%")
-            print(f"    Total (Rust):   {metrics['rust_total']:.1f}")
-            print(f"    Total (C++):    {metrics['ref_total']:.1f}")
-        else:
-            print(f"  WARNING: Reference shapefile not found: {ref_path}.shp")
-            print(f"           Skipping validation for {sim_name}")
-
-    # ── 10. Summary ───────────────────────────────────────────────────
+    # ── 10b. Summary ──────────────────────────────────────────────────
     print(f"\n{'='*60}")
-    print("VALIDATION SUMMARY")
+    print(f"VALIDATION SUMMARY  (GSDE, {N_REPEATS} repeats; reference: mod-PATH3DU, "
+          f"{REF_REPEATS} repeats)")
     print(f"{'='*60}")
-    print(f"Repeats: {N_REPEATS}  (set MP3DU_REPEATS=5000 for full run)")
-    for name, m in all_metrics.items():
-        print(f"  {name}:  r={m['pearson_r']:.4f}  nRMSE={m['nrmse']:.4f}  "
-              f"mass_err={m['mass_error_pct']:+.2f}%")
+    for setup_name in SETUP_NAMES:
+        print(f"Set-up {setup_name}: {SETUPS[setup_name]['label']}")
+        for sim in SIMULATIONS:
+            m = all_metrics[(setup_name, sim["name"])]
+            print(f"  {sim['name']}:  in aquifer {m['rust_fraction']:.4f} "
+                  f"(mod-PATH3DU {m['ref_fraction']:.4f})  r={m['pearson_r']:.4f}  "
+                  f"nRMSE={m['nrmse']:.4f}  mass_err={m['mass_error_pct']:+.2f}%")
 
-    # ── 11. Head-contour + particle-path overlay plot ─────────────────
+    # ── 11. Head-contour + particle-path overlay plot (first set-up) ─────────────────
     _save_head_plot(heads_2d, base_particles, drifts, all_trajectories, SIMULATIONS, MODEL_WS)
 
     # ── 12. Optional: reference comparison plots ─────────────────────
     try:
         import matplotlib.pyplot as plt
 
-        for sim in SIMULATIONS:
-            sim_name = sim["name"]
-            ref_shp = sim["ref_shp"]
-            ref_path = os.path.join(SHAPEFILE_DIR, ref_shp)
-            if not os.path.exists(ref_path + ".shp"):
-                continue
-            if sim_name not in all_metrics:
-                continue
-
-            ref_conc = load_reference_concentration(ref_path)
-            # Reorder reference to GSF order
-            ref_grid = np.zeros((NROWS, NCOLS), dtype=np.float64)
-            for i in range(NROWS):
-                for j in range(NCOLS):
-                    ref_idx = i * NCOLS + j
-                    ref_grid[NROWS - 1 - i, j] = ref_conc[ref_idx]
-
-            # Re-derive the 2-D concentration grids for plotting
-            rust_flat = bin_endpoints(all_results[sim_name], cell_row, cell_col, n_cells)
-            if N_REPEATS != 5000:
-                rust_flat = rust_flat * (5000.0 / N_REPEATS)
-            rust_grid = rust_flat.reshape(NROWS, NCOLS)
+        extent = [XLLCORNER, XLLCORNER + NCOLS * CELLSIZE,
+                  YLLCORNER, YLLCORNER + NROWS * CELLSIZE]
+        for (setup_name, sim_name), metrics in all_metrics.items():
+            ref_grid = ref_by_sim[sim_name].reshape(NROWS, NCOLS)
+            rust_counts, _excluded = bin_endpoints(all_results[(setup_name, sim_name)],
+                                                   cell_row, cell_col, n_cells)
+            rust_grid = counts_to_concentration(rust_counts, pore_volume,
+                                                mass_per_particle).reshape(NROWS, NCOLS)
 
             fig, axes = plt.subplots(1, 3, figsize=(18, 5))
-            extent = [XLLCORNER, XLLCORNER + NCOLS * CELLSIZE,
-                      YLLCORNER, YLLCORNER + NROWS * CELLSIZE]
-
             vmax = max(ref_grid.max(), rust_grid.max(), 1.0)
-
-            axes[0].imshow(ref_grid, origin="lower", extent=extent,
-                           vmin=0, vmax=vmax, cmap="hot_r")
-            axes[0].set_title(f"C++ Reference ({ref_shp})")
-
-            axes[1].imshow(rust_grid, origin="lower", extent=extent,
-                           vmin=0, vmax=vmax, cmap="hot_r")
-            axes[1].set_title(f"Rust SSP&A (×{N_REPEATS})")
-
+            axes[0].imshow(ref_grid, origin="lower", extent=extent, vmin=0, vmax=vmax, cmap="hot_r")
+            axes[0].set_title("mod-PATH3DU 2.1.9 (reference)")
+            axes[1].imshow(rust_grid, origin="lower", extent=extent, vmin=0, vmax=vmax, cmap="hot_r")
+            axes[1].set_title(f"MP3DU-RS, {setup_name} (×{N_REPEATS})")
             diff = rust_grid - ref_grid
             dmax = max(abs(diff.min()), abs(diff.max()), 1.0)
-            im = axes[2].imshow(diff, origin="lower", extent=extent,
-                                vmin=-dmax, vmax=dmax, cmap="RdBu_r")
-            axes[2].set_title("Difference (Rust − C++)")
+            im = axes[2].imshow(diff, origin="lower", extent=extent, vmin=-dmax, vmax=dmax, cmap="RdBu_r")
+            axes[2].set_title("Difference (MP3DU-RS − mod-PATH3DU)")
             fig.colorbar(im, ax=axes[2], shrink=0.8)
-
             for ax in axes:
                 ax.set_xlabel("X (m)")
                 ax.set_ylabel("Y (m)")
-
-            fig.suptitle(f"Example 5a — {sim_name}  "
-                         f"(r={all_metrics[sim_name]['pearson_r']:.3f})")
+            fig.suptitle(f"Example 5a — {sim_name}, {setup_name}  (r={metrics['pearson_r']:.3f})")
             fig.tight_layout()
-            plot_path = os.path.join(MODEL_WS, f"validation_{sim_name}.png")
+            plot_path = os.path.join(MODEL_WS, f"validation_{setup_name}_{sim_name}.png")
             fig.savefig(plot_path, dpi=150)
             plt.close(fig)
             print(f"  Plot saved: {plot_path}")

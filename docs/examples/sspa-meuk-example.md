@@ -14,7 +14,7 @@ This example demonstrates a complete workflow for tracking particles from a regi
 
 ## Running the Examples
 
-The scripts for this example are not self-contained downloads. They depend on external model data files (`mp3du.gsf`, `Heads_for_MEUK.asc`, `MEUK_WELLS.csv`, `PartStart_Intersect.*`) from `Examples/Example5a/02-MEUK_Equivalent/` in the mod-PATH3DU repository. The validation workflow also depends on legacy reference shapefiles in `Examples/Example5a/Shapefiles/`.
+The scripts for this example are not self-contained downloads. They depend on external model data files (`mp3du.gsf`, `Heads_for_MEUK.asc`, `MEUK_WELLS.csv`, `PartStart_Intersect.*`) from `Examples/Example5a/02-MEUK_Equivalent/` in the mod-PATH3DU repository. The validation workflow also depends on the MODFLOW heads file `Examples/Example5a/01-MODFLOW/dispdemoWEL.hds`, and on the mod-PATH3DU reference concentrations [`meuk_reference_concentrations.csv`](sspa-meuk-example/meuk_reference_concentrations.csv), which must be downloaded into the same directory as the script.
 
 To run these scripts, you must execute them from within that directory:
 
@@ -42,14 +42,22 @@ docs site because it is generated from external Example 5a input files.
 
 ## 2. Validation Script (`meuk_validation_workflow.py`)
 
-This is a full validation script. It includes dispersion, runs Monte Carlo repeats (e.g., 100 to 5000 times per particle), bins the endpoints into a concentration grid, loads the legacy C++ reference shapefiles, and computes quantitative validation metrics (Pearson correlation, normalized RMSE, mass error) to prove the Rust engine matches the legacy C++ engine. Besides the Example 5a input files, it also requires the reference shapefiles from `Examples/Example5a/Shapefiles/`.
+This is a full validation script. It tracks the particles with GSDE dispersion, runs Monte Carlo repeats (e.g., 100 to 5000 times per particle), and bins the endpoints of the particles that are still in the aquifer at the end time. Particles captured by the wells are not counted, as in the mod-PATH3DU reference. The script converts the counts to concentrations the same way the reference was made (count × mass per particle ÷ pore volume, with the pore volume taken from the MODFLOW heads) and compares the two concentration grids. It reports the fraction of particles still in the aquifer, the Pearson correlation and the normalized RMSE of the concentrations, and the difference in the mass remaining in the aquifer (the sum of concentration × pore volume, MP3DU-RS relative to mod-PATH3DU).
+
+Each end time is run with two tracking set-ups, which `MP3DU_SETUPS` selects (both by default):
+
+- `cpp_input`: as the mod-PATH3DU input `Ex4_MEUK.json` (step-doubling Runge-Kutta, no practical step limit), so that the comparison with the reference is like for like;
+- `dopri_1000`: Dormand-Prince with a 1,000-day step limit.
+
+The reference concentrations were made with mod-PATH3DU 2.1.9 (November 2026 build, which has the GSDE dispersion of LaBolle et al., 2000) from `Ex4_MEUK.json` as published, with 5,000 repeats per particle. The first lines of the file record how it was made.
 
 ### Output
 
-The validation script writes `meuk_validation_workflow_head_plot.png` to the
-working example directory when run locally. The image is not bundled into the
-published docs site because it is generated from external Example 5a input files
-and legacy reference shapefiles.
+The validation script writes `meuk_validation_workflow_head_plot.png` and, for
+each set-up and end time, `validation_<set-up>_<simulation>.png` (reference,
+MP3DU-RS and difference maps) to the working example directory when run locally.
+The images are not bundled into the published docs site because they are
+generated from external Example 5a input files.
 
 ### Code
 
@@ -91,9 +99,31 @@ For the **tutorial smoke test** (no dispersion, 1 realisation per particle):
 
 For the **validation workflow** (with dispersion, Monte Carlo repeats):
 
-- Each particle is run many times (100–5000 realisations) with random dispersion.
-- The endpoint cloud is binned into a concentration grid and compared against the legacy C++ reference.
-- Expected metrics: Pearson correlation > 0.95, normalised RMSE < 0.1, mass error < 1%.
+- Each particle is run many times (100–5000 realisations) with random dispersion, for each tracking set-up.
+- The endpoints of the particles still in the aquifer are binned into a concentration grid and compared against the mod-PATH3DU reference. Particles captured by the wells are excluded, as in the reference, so both grids show the mass remaining in the aquifer.
+
+The fraction of particles still in the aquifer, with MP3DU-RS 0.1.5 at 500 repeats:
+
+| | 5,044 days | 23,363 days | 50,000 days |
+|---|---|---|---|
+| mod-PATH3DU 2.1.9 (reference, 5,000 repeats) | 1.000 | 0.950 | 0.0252 |
+| MP3DU-RS, `cpp_input` | 1.000 | 0.951 | 0.0257 |
+| MP3DU-RS, `dopri_1000` | 1.000 | 0.949 | 0.0270 |
+| MT3D | — | 0.944 | 0.029 |
+
+The Pearson correlation and the normalised RMSE of the concentrations against the reference:
+
+| Repeats | Set-up | 5,044 days | 23,363 days | 50,000 days |
+|---|---|---|---|---|
+| 100 | `cpp_input` | 0.993, 0.003 | 0.964, 0.016 | 0.57, 0.049 |
+| 100 | `dopri_1000` | 0.993, 0.004 | 0.962, 0.017 | 0.54, 0.055 |
+| 500 | `cpp_input` | 0.999, 0.002 | 0.992, 0.008 | 0.82, 0.023 |
+| 500 | `dopri_1000` | 0.999, 0.002 | 0.992, 0.008 | 0.81, 0.025 |
+
+With the `cpp_input` set-up, the mass in the aquifer agrees with the reference to within the Monte Carlo noise: +0.1% at 23,363 days and +2% at 50,000 days at 500 repeats, against a sampling noise of about 2% at 50,000 days. With `dopri_1000`, MP3DU-RS leaves about 7% more mass in the aquifer at 50,000 days. mod-PATH3DU run with the same Dormand-Prince settings gives 0.0252, so the difference lies in the step control of the two Dormand-Prince implementations, not in the dispersion. The correlation at the late times rises with the number of repeats: at 50,000 days only about 2.5% of the particles remain in the aquifer, so the binned concentrations are noisy unless the number of repeats is large.
+
+!!! note "Earlier versions of this comparison"
+    Before MP3DU-RS 0.1.5 this page compared with reference shapefiles made in 2018, before mod-PATH3DU's dispersion was corrected in November 2026, and reported about 35% less mass in the aquifer at 50,000 days. That difference came from the reference, which lacked the dispersive drift and left 0.043 of the particles in the aquifer.
 
 ### Common Problems
 
@@ -105,7 +135,7 @@ For the **validation workflow** (with dispersion, Monte Carlo repeats):
 | `fit_sspa()` hangs for hours | Grid is very large (> 50k cells) | Expected — kriging is O(n²). For 40k cells, ~350 s is normal |
 | Pathlines go the wrong direction | `direction` is `-1.0` instead of `1.0` | Use `1.0` for forward (downgradient) tracking |
 | Particles ignore wells | Well drifts missing or `well_mask` is all-False | Ensure drifts list includes all wells and `well_mask[cell]` is True for well cells |
-| Validation metrics are poor | Different dispersion settings or too few Monte Carlo repeats | Match the legacy C++ settings exactly; use ≥ 1000 repeats |
+| Validation metrics are poor | Different dispersion settings, too few Monte Carlo repeats, or an old reference file | Use the `cpp_input` set-up and at least 500 repeats; download the current `meuk_reference_concentrations.csv` |
 
 For a comprehensive diagnostic guide, see [SSP&A Workflow — Diagnosing Silent Failures](../guides/sspa-workflow.md#diagnosing-silent-failures).
 

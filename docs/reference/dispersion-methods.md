@@ -7,8 +7,8 @@ mod-PATH3DU supports three dispersion modes for stochastic particle tracking. Wh
 | Mode | Stochastic | Parameters Required | Velocity Evaluations | Use Case |
 |------|-----------|--------------------|-----------------------|----------|
 | None | No | — | 0 extra | Advection-only tracking |
-| Gsde | Yes | `alpha_l`, `alpha_th`, `alpha_tv` | 1 extra (displaced position) | Standard dispersive transport — robust at material interfaces |
-| Ito | Yes | `alpha_l`, `alpha_th`, `alpha_tv` | 6 extra (numerical $\nabla \cdot \mathbf{D}$) | Full Itô SDE with explicit drift correction |
+| Gsde | Yes | `alpha_l`, `alpha_th`, `alpha_tv` | Up to 5 extra (the particle and the trial points) | Standard dispersive transport — robust at material interfaces |
+| Ito | Yes | `alpha_l`, `alpha_th`, `alpha_tv` | 8 extra (the particle and the numerical $\nabla \cdot \mathbf{D}$) | Itô SDE with explicit drift correction, for smooth fields |
 
 !!! info "Schema Values"
     Dispersion method values in the JSON Schema: `"None"`, `"Gsde"`, `"Ito"`.
@@ -31,7 +31,10 @@ No dispersion. Particles follow advective pathlines only. No random perturbation
 
 ## Gsde
 
-Generalized Stochastic Differential Equation two-step method (LaBolle et al., 2000). This is the recommended dispersion method for most simulations.
+Generalized stochastic differential equation (GSDE) of LaBolle et al. (2000), in the anisotropic form of their eqs. 17a–17c, as mod-PATH3DU 2.1.9 has used since November 2026. This is the recommended dispersion method for most simulations.
+
+!!! warning "Changed in 0.1.5"
+    Before 0.1.5 the GSDE drew its second step from random numbers independent of the first, which removes the drift term, so particles collected where dispersion is low; its two-step form (eq. 11a) is also not exact for anisotropic dispersion. Backward tracking reversed the drift, and vertical dispersion was scaled by the cell thickness. Results with dispersion from earlier versions should be recomputed. See the [changelog](https://github.com/sspa-inc/mp3du-rs/blob/main/CHANGELOG.md).
 
 ### Parameters
 
@@ -41,41 +44,37 @@ Generalized Stochastic Differential Equation two-step method (LaBolle et al., 20
 | Transverse horizontal dispersivity | `alpha_th` | number | ≥ 0 | Dispersivity perpendicular to flow in the horizontal plane [L] |
 | Transverse vertical dispersivity | `alpha_tv` | number | ≥ 0 | Dispersivity perpendicular to flow in the vertical plane [L] |
 
+The dispersivities are uniform: they come from the configuration, and the per-cell values given to `hydrate_cell_properties()` are not used.
+
 ### Mathematical Formulation
 
-The GSDE method solves the stochastic advection-dispersion equation using a two-step random walk that avoids computing the dispersion tensor gradient $\nabla \cdot \mathbf{D}$.
+A random walk reproduces the advection-dispersion equation only when a drift is added to the random step. The Itô SDE for the particle displacement is
 
-The general Itô SDE for particle displacement is:
+$$d\mathbf{X} = \left[\mathbf{V} + \theta^{-1}\nabla \cdot (\theta\mathbf{D})\right] dt + \mathbf{B} \cdot d\mathbf{W}$$
 
-$$d\mathbf{X} = \left[\mathbf{V} + \nabla \cdot \mathbf{D}\right] dt + \mathbf{B} \cdot d\mathbf{W}$$
+where $\mathbf{V}$ is the advective velocity, $\mathbf{D}$ the dispersion tensor, $\theta$ the porosity, $\mathbf{B}$ satisfies $\mathbf{B}\mathbf{B}^T = 2\mathbf{D}$, and $d\mathbf{W}$ is a Wiener process increment. Without the drift, particles collect where dispersion is low.
 
-where $\mathbf{V}$ is the advective velocity, $\mathbf{D}$ is the dispersion tensor, $\mathbf{B}$ satisfies $\mathbf{B}\mathbf{B}^T = 2\mathbf{D}$, and $d\mathbf{W}$ is a Wiener process increment.
+The GSDE obtains the drift without computing any gradient, by evaluating the dispersion at trial points with the same random numbers. Let $\lambda_n$ and $\mathbf{e}_n$ be the eigenvalues and unit eigenvectors of $2\mathbf{D}$, $\mathbf{S} = \sum_n \sqrt{\lambda_n}\, \mathbf{e}_n \mathbf{e}_n^T$ the symmetric square root of $2\mathbf{D}$, and $\Delta\mathbf{W} = \boldsymbol{\xi}\sqrt{\Delta t}$ with one $\boldsymbol{\xi} \sim \mathcal{N}(0, \mathbf{I})$ for the whole step. Then (LaBolle et al., 2000, eqs. 17a–17c)
 
-The GSDE two-step method eliminates the $\nabla \cdot \mathbf{D}$ term (which is undefined at material interfaces) by evaluating dispersion at two positions:
+$$\Delta\mathbf{Y} = \mathbf{S}(\mathbf{X})\,\Delta\mathbf{W}, \qquad \Delta\mathbf{U}_n = \sqrt{\lambda_n(\mathbf{X})}\,\Delta\mathbf{W}$$
 
-**Step 1 — Trial displacement** (LaBolle eq. 11a):
+$$\Delta\mathbf{X}_{disp} = \tfrac{1}{2}\sqrt{\frac{\theta(\mathbf{X}+\Delta\mathbf{Y})}{\theta(\mathbf{X})}}\;\mathbf{S}(\mathbf{X}+\Delta\mathbf{Y})\,\Delta\mathbf{W} \;+\; \tfrac{1}{2}\sum_n \mathbf{e}_n(\mathbf{X})\left[\mathbf{e}_n(\mathbf{X}) \cdot \sqrt{\frac{\theta(\mathbf{X}+\Delta\mathbf{U}_n)}{\theta(\mathbf{X})}}\;\mathbf{S}(\mathbf{X}+\Delta\mathbf{U}_n)\,\Delta\mathbf{W}\right]$$
 
-$$\Delta \mathbf{Y} = \mathbf{B}(\mathbf{x}) \cdot \boldsymbol{\xi}_1 \sqrt{\Delta t}$$
+For isotropic dispersion this reduces to $\Delta\mathbf{X}_{disp} = \mathbf{S}(\mathbf{X}+\Delta\mathbf{Y})\,\Delta\mathbf{W}$ (eq. 11a). Because no gradient is taken, jumps in dispersivity, porosity or velocity between cells are handled; the mean of the step is $\theta^{-1}\nabla\cdot(\theta\mathbf{D})\,\Delta t$.
 
-where $\boldsymbol{\xi}_1 \sim \mathcal{N}(0, \mathbf{I})$.
+**Trial points** are located by position: in the particle's layer, then in the wet cell below or above if the point lies outside the cell's saturated thickness, passing through dry cells as mod-PATH3DU does. If the first trial point $\mathbf{X}+\Delta\mathbf{Y}$ is outside the model, the step has no dispersive displacement; if a point $\mathbf{X}+\Delta\mathbf{U}_n$ is outside, the dispersion at the particle is used for it.
 
-**Step 2 — Actual displacement** (LaBolle eq. 11b):
+**Backward tracking** reverses advection but not the dispersive displacement: the backward process has the drift of the forward one.
 
-$$\Delta \mathbf{X} = \mathbf{B}(\mathbf{x} + \Delta \mathbf{Y}) \cdot \boldsymbol{\xi}_2 \sqrt{\Delta t}$$
+### Dispersion Tensor
 
-The accepted displacement is $\Delta \mathbf{X}$ from step 2 only. This two-evaluation trick implicitly accounts for the drift correction.
+The tensor is the Burnett and Frind (1987) tensor of the mod-PATH3DU guide, with $|\mathbf{v}|$ the velocity magnitude and $v_{xy} = \sqrt{v_x^2 + v_y^2}$:
 
-### Dispersion Tensor Construction
+$$D_{xx} = \frac{\alpha_L v_x^2 + \alpha_{TH} v_y^2 + \alpha_{TV} v_z^2}{|\mathbf{v}|}, \quad D_{yy} = \frac{\alpha_L v_y^2 + \alpha_{TH} v_x^2 + \alpha_{TV} v_z^2}{|\mathbf{v}|}, \quad D_{zz} = \frac{\alpha_L v_z^2 + \alpha_{TV} v_{xy}^2}{|\mathbf{v}|}$$
 
-In the velocity-aligned reference frame, the local dispersion coefficients are diagonal:
+$$D_{xy} = (\alpha_L - \alpha_{TH})\frac{v_x v_y}{|\mathbf{v}|}, \quad D_{xz} = (\alpha_L - \alpha_{TV})\frac{v_x v_z}{|\mathbf{v}|}, \quad D_{yz} = (\alpha_L - \alpha_{TV})\frac{v_y v_z}{|\mathbf{v}|}$$
 
-$$D_L = \alpha_L \|\mathbf{v}\|, \quad D_{TH} = \alpha_{TH} \|\mathbf{v}\|, \quad D_{TV} = \alpha_{TV} \|\mathbf{v}\|$$
-
-The Brownian displacement in local coordinates is:
-
-$$\Delta X_L = \sqrt{2 D_L \Delta t} \; \xi_1, \quad \Delta X_{TH} = \sqrt{2 D_{TH} \Delta t} \; \xi_2, \quad \Delta X_{TV} = \sqrt{2 D_{TV} \Delta t} \; \xi_3$$
-
-These are rotated to global coordinates using the velocity-aligned orthonormal frame $(\mathbf{e}_1, \mathbf{e}_2, \mathbf{e}_3)$ where $\mathbf{e}_1$ is the longitudinal direction (parallel to $\mathbf{v}$).
+Its principal directions are the flow direction $\mathbf{e}_0 = \mathbf{v}/|\mathbf{v}|$ with $\lambda_0 = 2\alpha_L|\mathbf{v}|$, the vertical transverse direction $\mathbf{e}_1 = (-v_x v_z, -v_y v_z, v_{xy}^2)/(|\mathbf{v}|\,v_{xy})$ with $\lambda_1 = 2\alpha_{TV}|\mathbf{v}|$, and the horizontal transverse direction $\mathbf{e}_2 = (-v_y, v_x, 0)/v_{xy}$ with $\lambda_2 = 2(\alpha_{TH} v_{xy}^2 + \alpha_{TV} v_z^2)/|\mathbf{v}|$. For purely vertical flow both horizontal directions take $\alpha_{TV}$.
 
 ### Example Configuration
 
@@ -91,11 +90,15 @@ These are rotated to global coordinates using the velocity-aligned orthonormal f
 ```
 
 !!! tip
-    GSDE is preferred over Itô when simulations involve heterogeneous media with sharp property contrasts, because it does not require computing $\nabla \cdot \mathbf{D}$ numerically.
+    GSDE is preferred over Itô when simulations involve heterogeneous media with sharp property contrasts, or variable porosity, because it does not compute $\nabla \cdot \mathbf{D}$ numerically.
+
+### Cost
+
+Each step evaluates the velocity at the particle, at $\mathbf{X}+\Delta\mathbf{Y}$, and at one point $\mathbf{X}+\Delta\mathbf{U}_n$ for each direction with $\lambda_n > 0$: up to 5 evaluations, 4 in a two-dimensional model with $\alpha_{TV} = 0$.
 
 ### Deterministic Seeding
 
-Random number generators are seeded deterministically by particle ID, not by thread identity. This ensures that trajectories are reproducible regardless of the number of parallel threads. Each particle uses 6 independent ChaCha8 RNG streams (3 for the trial step, 3 for the actual step).
+Random number generators are seeded deterministically by particle ID, not by thread identity. This ensures that trajectories are reproducible regardless of the number of parallel threads. Each particle uses 3 independent ChaCha8 streams, which give the one random vector of each step.
 
 ---
 
@@ -129,15 +132,20 @@ $$\frac{\partial D_{ij}}{\partial x_k} \approx \frac{D_{ij}(\mathbf{x} + \epsilo
 
 with fallback to one-sided differences at domain boundaries.
 
-**Brownian term:** Uses the same velocity-aligned Burnett-Frind dispersion tensor as GSDE:
+**Brownian term:** Uses the velocity-aligned dispersion tensor, built from the velocity at the start of the step:
 
 $$D_{ij} = D_L \, e_{1i} e_{1j} + D_{TH} \, e_{2i} e_{2j} + D_{TV} \, e_{3i} e_{3j}$$
 
-where $(\mathbf{e}_1, \mathbf{e}_2, \mathbf{e}_3)$ is the velocity-aligned orthonormal frame.
+where $(\mathbf{e}_1, \mathbf{e}_2, \mathbf{e}_3)$ is the velocity-aligned orthonormal frame below. It equals the GSDE's tensor when the flow is horizontal; when $v_z \neq 0$ the transverse directions differ.
+
+**Limits:** the drift is $\nabla \cdot \mathbf{D}$, without the porosity ($\theta^{-1}\nabla \cdot (\theta\mathbf{D})$ in general), and the central differences straddle cell faces where the velocity, and so $\mathbf{D}$, can jump. Use the GSDE where porosity varies or the velocity field is discontinuous.
+
+!!! info "Changed in 0.1.5"
+    The tensor is built from the velocity at the start of the step, as the Itô scheme requires, instead of the step's average velocity; positions are global (z an elevation) and the vertical result is converted to the cell's local z; backward tracking keeps the sign of the drift. Results change slightly.
 
 ### Cost
 
-The Itô method requires **6 extra velocity evaluations** per step (two per spatial dimension for central differences) compared to 1 extra for GSDE.
+The Itô method requires **8 extra velocity evaluations** per step (one at the particle, and seven for the central differences of $\nabla \cdot \mathbf{D}$), compared to up to 5 for GSDE.
 
 ### Example Configuration
 
@@ -153,7 +161,7 @@ The Itô method requires **6 extra velocity evaluations** per step (two per spat
 ```
 
 !!! warning "Performance"
-    The Itô method is significantly more expensive than GSDE due to the 6 additional velocity evaluations per step for the numerical $\nabla \cdot \mathbf{D}$ computation.
+    The Itô method is more expensive than GSDE because of the additional velocity evaluations per step for the numerical $\nabla \cdot \mathbf{D}$ computation.
 
 ### Deterministic Seeding
 
@@ -161,9 +169,9 @@ Each particle uses 3 independent ChaCha8 RNG streams (one per spatial dimension)
 
 ---
 
-## Velocity-Aligned Reference Frame
+## Velocity-Aligned Reference Frame (Itô)
 
-Both GSDE and Itô construct a velocity-aligned orthonormal frame for rotating between local (dispersive) and global coordinates:
+The Itô method constructs a velocity-aligned orthonormal frame for rotating between local (dispersive) and global coordinates (the GSDE uses the principal directions of the Burnett–Frind tensor above):
 
 | Direction | Basis Vector | Physical Meaning |
 |-----------|-------------|------------------|
@@ -177,7 +185,7 @@ If the velocity is nearly vertical (parallel to $z$-up), the algorithm falls bac
 
 ## References
 
-- LaBolle, E. M., Fogg, G. E., & Tompson, A. F. B. (2000). Random-walk simulation of transport in heterogeneous porous media: Local mass-conservation problem and implementation methods. *Water Resources Research*, 36(4), 583–593.
-- LaBolle, E. M., Fogg, G. E., & Tompson, A. F. B. (1996). Random-walk simulation of solute transport in heterogeneous porous media: An approach using Itô stochastic calculus. *Water Resources Research*, 32(3), 583–593.
+- LaBolle, E. M., Quastel, J., Fogg, G. E., & Gravner, J. (2000). Diffusion processes in composite porous media and their numerical integration by random walks: Generalized stochastic differential equations with discontinuous coefficients. *Water Resources Research*, 36(3), 651–662.
+- LaBolle, E. M., Fogg, G. E., & Tompson, A. F. B. (1996). Random-walk simulation of transport in heterogeneous porous media: Local mass-conservation problem and implementation methods. *Water Resources Research*, 32(3), 583–593.
 - Salamon, P., Fernàndez-Garcia, D., & Gómez-Hernández, J. J. (2006). A review and numerical assessment of the random walk particle tracking method. *Journal of Contaminant Hydrology*, 87(3–4), 277–305.
 - Burnett, R. D., & Frind, E. O. (1987). Simulation of contaminant transport in three dimensions: 2. Dimensionality effects. *Water Resources Research*, 23(4), 695–705.

@@ -1,5 +1,16 @@
 # mod-PATH3DU — Full Machine-Readable Reference
 
+## Install
+
+Two separate commands, on 64-bit Python >= 3.8 (Windows x86-64, macOS on Apple Silicon or Intel, Linux x86-64):
+
+    pip install numpy
+    pip install mp3du-py --index-url https://sspa-inc.github.io/mp3du-rs/simple/
+
+- mp3du-py is not on PyPI. Never combine the commands or use --extra-index-url: pip would also search PyPI and could install a package of the same name from there.
+- "No matching distribution found for numpy" means NumPy is missing: run the first command, then the second again.
+- Results can differ slightly between platforms; compare dispersion runs by their statistics, not particle by particle.
+
 ## Canonical Import
 
     import mp3du

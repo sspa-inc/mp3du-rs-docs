@@ -10,13 +10,12 @@ Common problems and their solutions.
 
 **Solution:**
 
-Install the wheel directly from the [GitHub Releases page](https://github.com/sspa-inc/mp3du-rs/releases):
+Install it with the two commands of the [Installation guide](../getting-started/install.md#install-with-pip), run separately:
 
 ```bash
-pip install https://github.com/sspa-inc/mp3du-rs/releases/download/vX.Y.Z/mp3du_py-X.Y.Z-cp38-abi3-win_amd64.whl
+pip install numpy
+pip install mp3du-py --index-url https://sspa-inc.github.io/mp3du-rs/simple/
 ```
-
-Replace the URL with the actual link to the latest `.whl` asset. See the [Installation guide](../getting-started/install.md) for full instructions.
 
 !!! tip
     Verify you are in the correct virtual environment:
@@ -30,6 +29,32 @@ Replace the URL with the actual link to the latest `.whl` asset. See the [Instal
     source .venv/bin/activate
     pip list | grep mp3du
     ```
+
+### `No matching distribution found for numpy`
+
+**Error pattern:**
+
+```text
+ERROR: Could not find a version that satisfies the requirement numpy (from mp3du-py) (from versions: none)
+ERROR: No matching distribution found for numpy (from mp3du-py)
+```
+
+**Cause:** NumPy is not installed. The second install command searches only SSP&A's package index, which holds mod-PATH3DU but not NumPy.
+
+**Solution:** Run `pip install numpy`, then the second command again. Do not add `--extra-index-url` to fetch NumPy in the same command: `mp3du-py` is not on PyPI, and a command that also searches PyPI could install a package of the same name from there (see [Install with pip](../getting-started/install.md#install-with-pip)).
+
+### `No matching distribution found for mp3du-py`
+
+**Error pattern:**
+
+```text
+ERROR: Could not find a version that satisfies the requirement mp3du-py (from versions: none)
+ERROR: No matching distribution found for mp3du-py
+```
+
+**Cause:** There is no wheel for this platform or this Python, or the index URL is mistyped. Wheels exist for 64-bit Python 3.8 or later on Windows (x86-64), macOS (Apple Silicon or Intel) and Linux (x86-64).
+
+**Solution:** Check the URL in the command, then `python --version`, and that Python is 64-bit: `python -c "import struct; print(struct.calcsize('P') * 8)"` prints `64`. On other platforms, such as Linux on ARM, mod-PATH3DU cannot be installed.
 
 ## Configuration Errors
 

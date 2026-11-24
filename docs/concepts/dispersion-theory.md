@@ -67,7 +67,7 @@ The GSDE of LaBolle et al. (2000) instead evaluates the dispersion at trial poin
 
 ### Implementation Details
 
-- Random numbers are generated using a **deterministic ChaCha8 RNG** seeded by particle ID, ensuring reproducibility
+- Random numbers are generated using a **deterministic ChaCha8 RNG** seeded by particle ID, so a run repeated on the same computer gives the same trajectories; between platforms they can differ (see [Results on Different Platforms](../getting-started/install.md#results-on-different-platforms))
 - Each particle receives an independent random stream, and one random vector drives all the trial points of a step
 - The Wiener increment is drawn from $\mathcal{N}(0, \Delta t)$ per dimension
 - Trial points are located by position, in the particle's layer or in the layer above or below, and take the dispersivities and porosity of the cell they lie in

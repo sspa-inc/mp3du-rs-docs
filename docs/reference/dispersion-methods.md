@@ -174,7 +174,7 @@ Each step evaluates the velocity at the particle, at $\mathbf{X}+\Delta\mathbf{Y
 
 ### Deterministic Seeding
 
-Random number generators are seeded deterministically by particle ID, not by thread identity. This ensures that trajectories are reproducible regardless of the number of parallel threads. Each particle uses 3 independent ChaCha8 streams, which give the one random vector of each step.
+Random number generators are seeded deterministically by particle ID, not by thread identity. This ensures that trajectories are reproducible on the same computer, regardless of the number of parallel threads; between platforms they can differ (see [Results on Different Platforms](../getting-started/install.md#results-on-different-platforms)). Each particle uses 3 independent ChaCha8 streams, which give the one random vector of each step.
 
 ---
 
@@ -243,7 +243,7 @@ The Itô method requires **8 extra velocity evaluations** per step (one at the p
 
 ### Deterministic Seeding
 
-Each particle uses 3 independent ChaCha8 RNG streams (one per spatial dimension), seeded deterministically by particle ID.
+Each particle uses 3 independent ChaCha8 RNG streams (one per spatial dimension), seeded deterministically by particle ID. As with the GSDE, trajectories are reproducible on the same computer but can differ between platforms (see [Results on Different Platforms](../getting-started/install.md#results-on-different-platforms)).
 
 ---
 

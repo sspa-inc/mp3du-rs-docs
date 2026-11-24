@@ -53,7 +53,9 @@ Reference file (download it into this directory, next to this script):
 
 Requirements:
   Python packages: numpy, pyshp (shapefile), matplotlib
-  mp3du 0.1.5 or later (pip install the wheel from the GitHub releases)
+  mp3du 0.1.5 or later, installed with two separate commands:
+    pip install numpy
+    pip install mp3du-py --index-url https://sspa-inc.github.io/mp3du-rs/simple/
 """
 import csv
 import json

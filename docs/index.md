@@ -27,6 +27,6 @@ mod-PATH3DU is a modernized particle tracking engine built in Rust with Python b
 Machine-readable references are available at:
 
 - [`AI Agent Prompts`](guides/agent-prompts.md) — Copy-paste prompts for MODFLOW and raster / MEUK / SSP&A workflows
-- [`llms.txt`](llms.txt) — Condensed project summary (< 4KB)
+- [`llms.txt`](llms.txt) — Condensed project summary
 - [`llms-full.txt`](llms-full.txt) — Complete schema, stubs, and examples
 - Raw artifacts — Direct access to `.pyi` stubs and JSON Schema (available after deployment)

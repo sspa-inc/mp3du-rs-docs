@@ -146,3 +146,4 @@ nav:
     - MEUK Example (SSP&A): examples/sspa-meuk-example.md
     - Invalid Configs: examples/invalid-configs.md
     - IFACE Flow Routing: reference/iface-flow-routing.md
+  - User's Guide: https://mp3du.sspa.com/man/index.html

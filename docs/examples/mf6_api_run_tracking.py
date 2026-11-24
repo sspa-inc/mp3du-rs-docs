@@ -115,9 +115,6 @@ def build_cell_properties(meta):
         retardation=np.ones(n_cells, dtype=float),
         hhk=np.full(n_cells, meta["hk"][0], dtype=float),
         vhk=np.full(n_cells, meta["vka"][0], dtype=float),
-        disp_long=np.zeros(n_cells, dtype=float),
-        disp_trans_h=np.zeros(n_cells, dtype=float),
-        disp_trans_v=np.zeros(n_cells, dtype=float),
     )
 
 

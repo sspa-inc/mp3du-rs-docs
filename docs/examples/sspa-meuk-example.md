@@ -49,6 +49,8 @@ Each end time is run with two tracking set-ups, which `MP3DU_SETUPS` selects (bo
 - `cpp_input`: as the mod-PATH3DU input `Ex4_MEUK.json` (step-doubling Runge-Kutta, no practical step limit), so that the comparison with the reference is like for like;
 - `dopri_1000`: Dormand-Prince with a 1,000-day step limit.
 
+The script gives the dispersivities in the configuration's `dispersion` block, as `Ex4_MEUK.json` gives them in its `DISPERSION` block: `alpha_l` 100 m (`LONGITUDINAL`), `alpha_th` 10 m (`TRANSVERSE_HORIZONTAL`) and `alpha_tv` 0, which an SSP&A field requires. It passes no dispersivity arrays to `hydrate_sspa_inputs()`; see [Giving the Dispersivities](../reference/dispersion-methods.md#giving-the-dispersivities).
+
 The reference concentrations were made with mod-PATH3DU 2.1.9 (November 2026 build, which has the GSDE dispersion of LaBolle et al., 2000) from `Ex4_MEUK.json` as published, with 5,000 repeats per particle. The first lines of the file record how it was made.
 
 ### Output

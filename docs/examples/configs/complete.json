@@ -17,7 +17,7 @@
     "alpha_th": 1.0,
     "alpha_tv": 0.1
   },
-  "retardation_enabled": true,
+  "retardation_enabled": false,
   "capture": {
     "max_time": 365250.0,
     "max_steps": 1000000,

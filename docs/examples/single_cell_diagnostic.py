@@ -108,9 +108,6 @@ cell_props = mp3du.hydrate_cell_properties(
     retardation=np.array([1.0]),
     hhk=np.array([HHK]),
     vhk=np.array([VHK]),
-    disp_long=np.array([0.0]),
-    disp_trans_h=np.array([0.0]),
-    disp_trans_v=np.array([0.0]),
 )
 
 # ╔══════════════════════════════════════════════════════════════════════╗

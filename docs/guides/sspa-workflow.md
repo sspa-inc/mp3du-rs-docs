@@ -12,6 +12,7 @@ The S.S. Papadopulos & Associates (SSP&A) method is ideal when you have a map of
 | `hydraulic_conductivity` or `hhk` | `np.ndarray[float64]` | `(N,)` | Hydraulic conductivity for each cell. Provide exactly one. |
 | `porosity` | `np.ndarray[float64]` | `(N,)` | Porosity for each cell. |
 | `well_mask` | `np.ndarray[bool]` | `(N,)` | Boolean array over cells indicating cells with wells. |
+| `disp_long`, `disp_trans_h`, `disp_trans_v` | `np.ndarray[float64]` | `(N,)` | Optional dispersivities per cell, all three, with `disp_trans_v` 0. Alternatively give `alpha_l`, `alpha_th` and `alpha_tv` in the configuration; never both. |
 | `config` | `SspaConfig` | N/A | Fitting configuration (`search_radius`, `krig_offset`). |
 | `drifts` | `list[dict]` | N/A | List of drift definitions (see [Drift Schema](../reference/python-api/sspa-drift-schema.md)). |
 
@@ -36,6 +37,8 @@ Call `mp3du.fit_sspa(config, grid, inputs, drifts)` with an `SspaConfig`, the gr
 
 ### 6. Configure and Run Simulation
 Create a `SimulationConfig`, define `ParticleStart` locations, and call `mp3du.run_simulation()` using the fitted velocity field.
+
+With dispersion, give the dispersivities either per cell to `hydrate_sspa_inputs()` (step 3) or as `alpha_l`, `alpha_th` and `alpha_tv` in the configuration's `dispersion` block, not both. The SSP&A field is two-dimensional, so the vertical transverse dispersivity must be 0. See [Giving the Dispersivities](../reference/dispersion-methods.md#giving-the-dispersivities).
 
 !!! note "SimulationConfig velocity_method"
     Even when using the SSP&A method to fit the velocity field, the `velocity_method` in the `SimulationConfig` JSON must still be set to `"Waterloo"`. This is because `"Waterloo"` is currently the only supported velocity method in the configuration schema, and the underlying solver uses a unified interface for both field types.
@@ -106,6 +109,9 @@ When calling `hydrate_sspa_inputs()`, you must provide either `hydraulic_conduct
 
 ### Mismatched Array Lengths
 All input arrays (heads, conductivity, porosity, well_mask) must have exactly the same length as the number of cells in the grid.
+
+### Giving Dispersivities Twice
+Give the dispersivities either per cell to `hydrate_sspa_inputs()` or as `alpha_l`, `alpha_th` and `alpha_tv` in the configuration, not both: `run_simulation()` raises `ValueError` for both, and for neither when dispersion is on. `alpha_tv` (or `disp_trans_v`) must be 0 for an SSP&A field.
 
 ### well_mask Shape Confusion
 The `well_mask` is a boolean array over cells (1D array covering all cells), not a list of well indices or coordinates.

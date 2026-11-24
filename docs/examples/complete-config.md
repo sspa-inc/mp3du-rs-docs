@@ -1,6 +1,6 @@
 # Complete Configuration Example
 
-A fully-specified `SimulationConfig` JSON exercising all available options, including GSDE dispersion and retardation.
+A fully-specified `SimulationConfig` JSON exercising all available options, including GSDE dispersion with the dispersivities in the configuration.
 
 ## Configuration
 
@@ -19,7 +19,7 @@ A fully-specified `SimulationConfig` JSON exercising all available options, incl
 | `direction` | `1.0` | Forward tracking (in the direction of flow) |
 | `initial_dt` | `1.0` | Initial time step of 1 day |
 | `max_dt` | `100.0` | Maximum time step of 100 days |
-| `retardation_enabled` | `true` | Retardation active — uses per-cell retardation factors |
+| `retardation_enabled` | `false` | Reserved for retardation, which MP3DU-RS does not apply yet: the value has no effect |
 
 ### Adaptive Stepping
 
@@ -42,6 +42,8 @@ A fully-specified `SimulationConfig` JSON exercising all available options, incl
 | `alpha_l` | `10.0` | Longitudinal dispersivity (length units) |
 | `alpha_th` | `1.0` | Transverse horizontal dispersivity |
 | `alpha_tv` | `0.1` | Transverse vertical dispersivity |
+
+These values apply in every cell, so the model's inputs must not give dispersivities per cell as well (see [Giving the Dispersivities](../reference/dispersion-methods.md#giving-the-dispersivities)).
 
 ### Capture (Termination Criteria)
 

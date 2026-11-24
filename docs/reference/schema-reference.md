@@ -23,8 +23,8 @@ Configuration contract for `SimulationConfig`. Generated from `docs/assets/raw/m
 | `velocity_method` | string | Yes | — | one of: `Waterloo` | Velocity-method selector used by the SimulationConfig schema. Currently only `Waterloo` is accepted here. SSP&A workflows still use `Waterloo` in the config because the SSP&A velocity field is fitted outside the JSON config and then tracked through the same runtime interface. |
 | `solver` | string | Yes | — | one of: `Euler`, `Rk4StepDoubling`, `DormandPrince`, `CashKarp`, `VernerRobust`, `VernerEfficient` | Runge-Kutta solver variant for particle integration. `Euler` uses a fixed step (non-adaptive). `Rk4StepDoubling` is a classic RK4 with step-doubling error control. `DormandPrince` is the recommended default (embedded 4/5 pair). `CashKarp` is an alternative 4/5 pair. `VernerRobust` and `VernerEfficient` are 6/7 pairs for high-accuracy work. |
 | `adaptive` | object | Yes | — | — | Adaptive time-stepping parameters that control how the solver adjusts dt between integration steps. All fields are required even when using the non-adaptive Euler solver. |
-| `dispersion` | object (`"None"` \| `"Gsde"` \| `"Ito"`) | Yes | — | — | Dispersion model configuration. Choose `None` for pure advection, `Gsde` for the generalised stochastic differential equation method, or `Ito` for the Itô-calculus formulation. When dispersion is enabled, each particle run is stochastic — run multiple realisations (Monte Carlo) to build concentration fields. |
-| `retardation_enabled` | boolean | Yes | — | — | When true, the solver multiplies each cell's velocity by 1/R where R is the retardation factor from the cell properties. Requires that retardation factors were provided during hydration. Set to false for conservative (non-sorbing) transport. |
+| `dispersion` | object (`"None"` \| `"Gsde"` \| `"Ito"`) | Yes | — | — | Dispersion model configuration. Choose `None` for pure advection, `Gsde` for the generalised stochastic differential equation method, or `Ito` for the Itô-calculus formulation. When dispersion is enabled, each particle run is stochastic — run multiple realisations (Monte Carlo) to build concentration fields. The dispersivities are given either here (alpha_l, alpha_th and alpha_tv, all three, the same in every cell) or per cell to hydrate_cell_properties() or hydrate_sspa_inputs(), never both: with dispersion on, a run that gives them both ways, or neither, stops with an error. |
+| `retardation_enabled` | boolean | Yes | — | — | Reserved for retardation, which MP3DU-RS does not apply yet: the value has no effect. (mod-PATH3DU's RETARDATION option multiplies each cell's porosity by its retardation factor.) |
 | `capture` | object | Yes | — | — | — |
 | `initial_dt` | number | Yes | — | > 0 | Starting time step for the first integration step of each particle, in model time units. The adaptive solver will adjust this after the first step. The Euler solver uses it as its fixed step, capped at max_dt. |
 | `max_dt` | number | Yes | — | > 0 | Upper bound on the time step in model time units. The adaptive solver will never grow dt beyond this value, even if the error estimate would allow it. Prevents particles from jumping over cells in smooth regions. |
@@ -85,18 +85,18 @@ The `dispersion` property uses one of the following variant schemas:
 | Property | Type | Required | Default | Constraints | Description |
 |----------|------|----------|---------|-------------|-------------|
 | `method` | string | Yes | — | must be `Gsde` | Generalised Stochastic Differential Equation dispersion method. |
-| `alpha_l` | number | Yes | — | ≥ 0 | Longitudinal dispersivity — spreading along the flow direction, in model length units (e.g. metres). Must be ≥ alpha_th ≥ alpha_tv. |
-| `alpha_th` | number | Yes | — | ≥ 0 | Horizontal transverse dispersivity — spreading perpendicular to flow in the horizontal plane, in model length units. |
-| `alpha_tv` | number | Yes | — | ≥ 0 | Vertical transverse dispersivity — spreading perpendicular to flow in the vertical direction, in model length units. Typically the smallest of the three. |
+| `alpha_l` | number | No (all three or none) | — | ≥ 0 | Longitudinal dispersivity — spreading along the flow direction, in model length units (e.g. metres). Usually the largest of the three. Give all three of alpha_l, alpha_th and alpha_tv, for the same dispersivities in every cell, or none of them, with the dispersivities given per cell instead. |
+| `alpha_th` | number | No (all three or none) | — | ≥ 0 | Horizontal transverse dispersivity — spreading perpendicular to flow in the horizontal plane, in model length units. Give all three of alpha_l, alpha_th and alpha_tv, for the same dispersivities in every cell, or none of them, with the dispersivities given per cell instead. |
+| `alpha_tv` | number | No (all three or none) | — | ≥ 0 | Vertical transverse dispersivity — spreading perpendicular to flow in the vertical direction, in model length units. Typically the smallest of the three; must be 0 with an SSP&A (MEUK) field, which is two-dimensional. Give all three of alpha_l, alpha_th and alpha_tv, for the same dispersivities in every cell, or none of them, with the dispersivities given per cell instead. |
 
 #### Variant: `"Ito"`
 
 | Property | Type | Required | Default | Constraints | Description |
 |----------|------|----------|---------|-------------|-------------|
 | `method` | string | Yes | — | must be `Ito` | Itô-calculus dispersion formulation. |
-| `alpha_l` | number | Yes | — | ≥ 0 | Longitudinal dispersivity — spreading along the flow direction, in model length units (e.g. metres). Must be ≥ alpha_th ≥ alpha_tv. |
-| `alpha_th` | number | Yes | — | ≥ 0 | Horizontal transverse dispersivity — spreading perpendicular to flow in the horizontal plane, in model length units. |
-| `alpha_tv` | number | Yes | — | ≥ 0 | Vertical transverse dispersivity — spreading perpendicular to flow in the vertical direction, in model length units. Typically the smallest of the three. |
+| `alpha_l` | number | No (all three or none) | — | ≥ 0 | Longitudinal dispersivity — spreading along the flow direction, in model length units (e.g. metres). Usually the largest of the three. Give all three of alpha_l, alpha_th and alpha_tv, for the same dispersivities in every cell, or none of them, with the dispersivities given per cell instead. Per-cell dispersivities must be the same in every cell for Ito. |
+| `alpha_th` | number | No (all three or none) | — | ≥ 0 | Horizontal transverse dispersivity — spreading perpendicular to flow in the horizontal plane, in model length units. Give all three of alpha_l, alpha_th and alpha_tv, for the same dispersivities in every cell, or none of them, with the dispersivities given per cell instead. Per-cell dispersivities must be the same in every cell for Ito. |
+| `alpha_tv` | number | No (all three or none) | — | ≥ 0 | Vertical transverse dispersivity — spreading perpendicular to flow in the vertical direction, in model length units. Typically the smallest of the three; must be 0 with an SSP&A (MEUK) field, which is two-dimensional. Give all three of alpha_l, alpha_th and alpha_tv, for the same dispersivities in every cell, or none of them, with the dispersivities given per cell instead. Per-cell dispersivities must be the same in every cell for Ito. |
 
 ??? note "Raw JSON Schema"
     ```json
@@ -198,7 +198,7 @@ The `dispersion` property uses one of the following variant schemas:
           "additionalProperties": false
         },
         "dispersion": {
-          "description": "Dispersion model configuration. Choose `None` for pure advection, `Gsde` for the generalised stochastic differential equation method, or `Ito` for the It\u00f4-calculus formulation. When dispersion is enabled, each particle run is stochastic \u2014 run multiple realisations (Monte Carlo) to build concentration fields.",
+          "description": "Dispersion model configuration. Choose `None` for pure advection, `Gsde` for the generalised stochastic differential equation method, or `Ito` for the It\u00f4-calculus formulation. When dispersion is enabled, each particle run is stochastic \u2014 run multiple realisations (Monte Carlo) to build concentration fields. The dispersivities are given either here (alpha_l, alpha_th and alpha_tv, all three, the same in every cell) or per cell to hydrate_cell_properties() or hydrate_sspa_inputs(), never both: with dispersion on, a run that gives them both ways, or neither, stops with an error.",
           "oneOf": [
             {
               "type": "object",
@@ -216,10 +216,37 @@ The `dispersion` property uses one of the following variant schemas:
             {
               "type": "object",
               "required": [
-                "method",
-                "alpha_l",
-                "alpha_th",
-                "alpha_tv"
+                "method"
+              ],
+              "anyOf": [
+                {
+                  "required": [
+                    "alpha_l",
+                    "alpha_th",
+                    "alpha_tv"
+                  ]
+                },
+                {
+                  "not": {
+                    "anyOf": [
+                      {
+                        "required": [
+                          "alpha_l"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "alpha_th"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "alpha_tv"
+                        ]
+                      }
+                    ]
+                  }
+                }
               ],
               "properties": {
                 "method": {
@@ -229,17 +256,17 @@ The `dispersion` property uses one of the following variant schemas:
                 "alpha_l": {
                   "type": "number",
                   "minimum": 0,
-                  "description": "Longitudinal dispersivity \u2014 spreading along the flow direction, in model length units (e.g. metres). Must be \u2265 alpha_th \u2265 alpha_tv."
+                  "description": "Longitudinal dispersivity \u2014 spreading along the flow direction, in model length units (e.g. metres). Usually the largest of the three. Give all three of alpha_l, alpha_th and alpha_tv, for the same dispersivities in every cell, or none of them, with the dispersivities given per cell instead."
                 },
                 "alpha_th": {
                   "type": "number",
                   "minimum": 0,
-                  "description": "Horizontal transverse dispersivity \u2014 spreading perpendicular to flow in the horizontal plane, in model length units."
+                  "description": "Horizontal transverse dispersivity \u2014 spreading perpendicular to flow in the horizontal plane, in model length units. Give all three of alpha_l, alpha_th and alpha_tv, for the same dispersivities in every cell, or none of them, with the dispersivities given per cell instead."
                 },
                 "alpha_tv": {
                   "type": "number",
                   "minimum": 0,
-                  "description": "Vertical transverse dispersivity \u2014 spreading perpendicular to flow in the vertical direction, in model length units. Typically the smallest of the three."
+                  "description": "Vertical transverse dispersivity \u2014 spreading perpendicular to flow in the vertical direction, in model length units. Typically the smallest of the three; must be 0 with an SSP&A (MEUK) field, which is two-dimensional. Give all three of alpha_l, alpha_th and alpha_tv, for the same dispersivities in every cell, or none of them, with the dispersivities given per cell instead."
                 }
               },
               "additionalProperties": false
@@ -247,10 +274,37 @@ The `dispersion` property uses one of the following variant schemas:
             {
               "type": "object",
               "required": [
-                "method",
-                "alpha_l",
-                "alpha_th",
-                "alpha_tv"
+                "method"
+              ],
+              "anyOf": [
+                {
+                  "required": [
+                    "alpha_l",
+                    "alpha_th",
+                    "alpha_tv"
+                  ]
+                },
+                {
+                  "not": {
+                    "anyOf": [
+                      {
+                        "required": [
+                          "alpha_l"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "alpha_th"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "alpha_tv"
+                        ]
+                      }
+                    ]
+                  }
+                }
               ],
               "properties": {
                 "method": {
@@ -260,17 +314,17 @@ The `dispersion` property uses one of the following variant schemas:
                 "alpha_l": {
                   "type": "number",
                   "minimum": 0,
-                  "description": "Longitudinal dispersivity \u2014 spreading along the flow direction, in model length units (e.g. metres). Must be \u2265 alpha_th \u2265 alpha_tv."
+                  "description": "Longitudinal dispersivity \u2014 spreading along the flow direction, in model length units (e.g. metres). Usually the largest of the three. Give all three of alpha_l, alpha_th and alpha_tv, for the same dispersivities in every cell, or none of them, with the dispersivities given per cell instead. Per-cell dispersivities must be the same in every cell for Ito."
                 },
                 "alpha_th": {
                   "type": "number",
                   "minimum": 0,
-                  "description": "Horizontal transverse dispersivity \u2014 spreading perpendicular to flow in the horizontal plane, in model length units."
+                  "description": "Horizontal transverse dispersivity \u2014 spreading perpendicular to flow in the horizontal plane, in model length units. Give all three of alpha_l, alpha_th and alpha_tv, for the same dispersivities in every cell, or none of them, with the dispersivities given per cell instead. Per-cell dispersivities must be the same in every cell for Ito."
                 },
                 "alpha_tv": {
                   "type": "number",
                   "minimum": 0,
-                  "description": "Vertical transverse dispersivity \u2014 spreading perpendicular to flow in the vertical direction, in model length units. Typically the smallest of the three."
+                  "description": "Vertical transverse dispersivity \u2014 spreading perpendicular to flow in the vertical direction, in model length units. Typically the smallest of the three; must be 0 with an SSP&A (MEUK) field, which is two-dimensional. Give all three of alpha_l, alpha_th and alpha_tv, for the same dispersivities in every cell, or none of them, with the dispersivities given per cell instead. Per-cell dispersivities must be the same in every cell for Ito."
                 }
               },
               "additionalProperties": false
@@ -279,7 +333,7 @@ The `dispersion` property uses one of the following variant schemas:
         },
         "retardation_enabled": {
           "type": "boolean",
-          "description": "When true, the solver multiplies each cell's velocity by 1/R where R is the retardation factor from the cell properties. Requires that retardation factors were provided during hydration. Set to false for conservative (non-sorbing) transport."
+          "description": "Reserved for retardation, which MP3DU-RS does not apply yet: the value has no effect. (mod-PATH3DU's RETARDATION option multiplies each cell's porosity by its retardation factor.)"
         },
         "capture": {
           "type": "object",

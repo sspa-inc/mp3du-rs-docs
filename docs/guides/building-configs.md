@@ -63,7 +63,7 @@ See the [Schema Reference](../reference/schema-reference.md) for the complete co
       "direction": 1.0,
       "initial_dt": 0.5,
       "max_dt": 500.0,
-      "retardation_enabled": true,
+      "retardation_enabled": false,
       "adaptive": {
         "tolerance": 1e-7,
         "safety": 0.9,
@@ -102,7 +102,7 @@ All top-level fields and most nested fields are required. The capture block may 
 | `direction` | number | `1.0` or `-1.0` | Forward or backward tracking |
 | `initial_dt` | number | > 0 | Initial time step |
 | `max_dt` | number | > 0 | Maximum time step |
-| `retardation_enabled` | boolean | — | Enable retardation factors |
+| `retardation_enabled` | boolean | — | Reserved for retardation, which MP3DU-RS does not apply yet: the value has no effect |
 | `adaptive` | object | See below | Adaptive stepping parameters |
 | `dispersion` | object | See below | Dispersion configuration |
 | `capture` | object | See below | Termination criteria |
@@ -173,6 +173,16 @@ See [Adaptive Stepping](../concepts/adaptive-stepping.md) for the mathematical b
     2. **alpha_th** — Horizontal transverse dispersivity (spreading perpendicular to flow, in the horizontal plane).
     3. **alpha_tv** — Vertical transverse dispersivity (spreading perpendicular to flow, in the vertical direction).
 
+=== "GSDE, dispersivities per cell"
+
+    ```json
+    "dispersion": {
+      "method": "Gsde"
+    }
+    ```
+
+    The dispersivities come from the `disp_long`, `disp_trans_h` and `disp_trans_v` arrays given to `hydrate_cell_properties()` or `hydrate_sspa_inputs()`.
+
 === "Ito"
 
     ```json
@@ -184,7 +194,7 @@ See [Adaptive Stepping](../concepts/adaptive-stepping.md) for the mathematical b
     }
     ```
 
-See [Dispersion Theory](../concepts/dispersion-theory.md) for the mathematical formulation and [Dispersion Methods](../reference/dispersion-methods.md) for the parameter specification.
+The dispersivities are given either here, all three, the same in every cell, or per cell with the model's inputs, with only `"method"` here. Only one of the two may be used: with dispersion on, a run stops with a `ValueError` if both are given, or neither. See [Giving the Dispersivities](../reference/dispersion-methods.md#giving-the-dispersivities), [Dispersion Theory](../concepts/dispersion-theory.md) for the mathematical formulation and [Dispersion Methods](../reference/dispersion-methods.md) for the parameter specification.
 
 ## Capture (Termination Criteria)
 
@@ -311,7 +321,10 @@ config.validate()  # raises ValueError if invalid; may issue a UserWarning
     Even if you use a non-adaptive solver like Euler, the `adaptive` block and all its fields must be present. Use the defaults from the minimal example above.
 
 !!! warning "Dispersion `alpha_*` values must be ≥ 0"
-    Negative dispersivity values are physically meaningless and will be rejected by the schema. Use `0.0` if a particular dispersivity component is not needed.
+    Negative dispersivity values are physically meaningless and are rejected, in the configuration and in the per-cell arrays. Use `0.0` if a particular dispersivity component is not needed.
+
+!!! warning "Dispersivity in one place only"
+    Give `alpha_l`, `alpha_th` and `alpha_tv` in the `dispersion` block, or the per-cell arrays to `hydrate_cell_properties()` or `hydrate_sspa_inputs()`, not both. Giving only some of the three numbers is also an error. `config.validate()` checks the configuration alone and cannot tell whether the model's inputs also give the dispersivities; `run_simulation()` checks that. See [Giving the Dispersivities](../reference/dispersion-methods.md#giving-the-dispersivities).
 
 !!! warning "`additional_properties` is false"
     The schema disallows extra fields. Typos like `"solver_name"` instead of `"solver"` will cause a validation error.

@@ -745,7 +745,7 @@ def main():
                     "method": "Gsde",
                     "alpha_l": DISP_LONGITUDINAL,
                     "alpha_th": DISP_TRANSVERSE_H,
-                    "alpha_tv": 0.0,
+                    "alpha_tv": 0.0,  # must be 0 for an SSP&A field (two-dimensional)
                 },
                 "retardation_enabled": RETARDATION != 1.0,
                 "capture": {

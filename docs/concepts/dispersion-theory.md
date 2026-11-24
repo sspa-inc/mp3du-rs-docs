@@ -30,7 +30,7 @@ where:
 - $V_i, V_j$ — components of the velocity vector
 
 !!! info "Three dispersivity parameters"
-    mod-PATH3DU distinguishes **horizontal transverse** ($\alpha_{Th}$) and **vertical transverse** ($\alpha_{Tv}$) dispersivity, giving three parameters: `alpha_l`, `alpha_th`, and `alpha_tv`. The tensor then has the flow direction, a horizontal transverse direction and a vertical transverse direction as its principal axes; [Dispersion Methods](../reference/dispersion-methods.md#dispersion-tensor) gives its components.
+    mod-PATH3DU distinguishes **horizontal transverse** ($\alpha_{Th}$) and **vertical transverse** ($\alpha_{Tv}$) dispersivity, giving three parameters: `alpha_l`, `alpha_th`, and `alpha_tv`. The tensor then has the flow direction, a horizontal transverse direction and a vertical transverse direction as its principal axes; [Dispersion Methods](../reference/dispersion-methods.md#dispersion-tensor) gives its components. The three are given either per cell or once, for every cell, in the configuration; see [Giving the Dispersivities](../reference/dispersion-methods.md#giving-the-dispersivities).
 
 The random step uses a matrix $\mathbf{B}$ with $\mathbf{B} \mathbf{B}^T = 2\mathbf{D}$, built from these principal axes.
 
@@ -70,7 +70,7 @@ The GSDE of LaBolle et al. (2000) instead evaluates the dispersion at trial poin
 - Random numbers are generated using a **deterministic ChaCha8 RNG** seeded by particle ID, ensuring reproducibility
 - Each particle receives an independent random stream, and one random vector drives all the trial points of a step
 - The Wiener increment is drawn from $\mathcal{N}(0, \Delta t)$ per dimension
-- Trial points are located by position, in the particle's layer or in the layer above or below
+- Trial points are located by position, in the particle's layer or in the layer above or below, and take the dispersivities and porosity of the cell they lie in
 - In backward tracking the dispersive displacement keeps its direction, while advection reverses
 
 ## Ito Formulation
@@ -126,11 +126,11 @@ mod-PATH3DU uses the **Itô convention** because it pairs naturally with the exp
 | Accuracy | High | High |
 
 !!! tip "Which method should I use?"
-    Start with **GSDE** for most applications. It is more robust at material interfaces and computationally cheaper. Use **Ito** when you need exact Fokker–Planck consistency or are validating against analytical solutions that assume the Itô convention.
+    Start with **GSDE** for most applications. It is more robust at material interfaces and computationally cheaper, and it takes dispersivities that differ between cells, which Itô refuses. Use **Ito** when you need exact Fokker–Planck consistency or are validating against analytical solutions that assume the Itô convention.
 
 ## Configuration
 
-Dispersion is configured in the `SimulationConfig` JSON:
+Dispersion is configured in the `SimulationConfig` JSON. The dispersivities are given there, as below, for every cell, or per cell to `hydrate_cell_properties()` or `hydrate_sspa_inputs()` with only `"method"` in the JSON: one or the other, never both (see [Giving the Dispersivities](../reference/dispersion-methods.md#giving-the-dispersivities)).
 
 === "GSDE"
 

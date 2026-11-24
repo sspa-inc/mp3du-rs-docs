@@ -35,9 +35,6 @@ cell_properties = mp3du.hydrate_cell_properties(
     retardation=np.array([1.0]),
     hhk=np.array([1e-4]),
     vhk=np.array([1e-5]),
-    disp_long=np.array([0.0]),
-    disp_trans_h=np.array([0.0]),
-    disp_trans_v=np.array([0.0]),
 )
 
 # --- 3. Hydrate cell flows ---

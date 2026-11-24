@@ -28,11 +28,11 @@ Cell geometry is defined by 2D polygonal footprints in the XY plane plus top/bot
 | Length | Model length units (m or ft) | Coordinates, elevations, dispersivities |
 | Time | Model time units (d or s) | Step sizes, max_time, velocities |
 | Velocity | Length / Time | Derived from flow and geometry |
-| Dispersivity | Length | Same length unit as model — `alpha_l`, `alpha_th`, `alpha_tv` |
+| Dispersivity | Length | Same length unit as model — `alpha_l`, `alpha_th`, `alpha_tv` in the configuration, or `disp_long`, `disp_trans_h`, `disp_trans_v` per cell |
 | Flow rate | Length³ / Time | Face flows, well rates, top/bottom fluxes |
 | Hydraulic head | Length | Same length unit as model |
 | Porosity | Dimensionless | 0 < n ≤ 1 |
-| Retardation | Dimensionless | ≥ 1.0 |
+| Retardation | Dimensionless | ≥ 1.0; not applied yet (`retardation_enabled` has no effect) |
 | Hydraulic conductivity | Length / Time | `hhk` (horizontal), `vhk` (vertical) |
 
 ---

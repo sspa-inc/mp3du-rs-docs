@@ -60,9 +60,10 @@ cell_props = mp3du.hydrate_cell_properties(
     retardation=np.full(n_cells, 1.0),    # retardation factor
     hhk=np.full(n_cells, 1e-4),           # horizontal hydraulic conductivity
     vhk=np.full(n_cells, 1e-5),           # vertical hydraulic conductivity
-    disp_long=np.full(n_cells, 10.0),     # longitudinal dispersivity
-    disp_trans_h=np.full(n_cells, 1.0),   # horizontal transverse dispersivity
-    disp_trans_v=np.full(n_cells, 0.1),   # vertical transverse dispersivity
+    # Dispersivity per cell (disp_long, disp_trans_h, disp_trans_v) is
+    # optional, and so are alpha_l, alpha_th, alpha_tv in the configuration;
+    # give one of the two, never both (Dispersion Methods, "Giving the
+    # Dispersivities"). This example tracks without dispersion.
 )
 
 # ------------------------------------------------------------------

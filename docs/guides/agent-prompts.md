@@ -37,6 +37,7 @@ These are the highest-value references to name explicitly in your prompt:
 - `https://sspa-inc.github.io/mp3du-rs-docs/llms-full.txt` - full machine-readable reference
 - `https://sspa-inc.github.io/mp3du-rs-docs/guides/building-configs/` - `SimulationConfig` patterns
 - `https://sspa-inc.github.io/mp3du-rs-docs/guides/troubleshooting/` - common capture and hydration problems
+- `https://sspa-inc.github.io/mp3du-rs-docs/reference/dispersion-methods/#giving-the-dispersivities` - dispersivities per cell or in the configuration, never both
 
 **MODFLOW / Waterloo path:**
 
@@ -73,7 +74,7 @@ These are the highest-value references to name explicitly in your prompt:
 > If you cannot access any of them, tell me which source is unavailable and stop instead of guessing.
 >
 > Then reply with:
-> 1. A 4-bullet list of non-negotiable implementation rules covering `water_table`, `face_flow`, `q_well`, and IFACE / `q_vert` handling.
+> 1. A 5-bullet list of non-negotiable implementation rules covering `water_table`, `face_flow`, `q_well`, IFACE / `q_vert` handling, and where the dispersivities are given (per cell or in the configuration, never both).
 > 2. A short list of the docs you will consult again before writing code.
 
 ---
@@ -107,6 +108,7 @@ These are the highest-value references to name explicitly in your prompt:
 > - how face connectivity / CSR arrays are expected to be assembled
 > - whether IFACE boundary metadata appears available
 > - how `q_vert` (all flow through the top and bottom faces, without storage), `q_storage`, and the total `q_top` / `q_bot` arrays (positive upward) will be built
+> - where the dispersivities will come from, if dispersion is wanted: per cell to `hydrate_cell_properties()` (for example from the `.p3d` arrays of a mod-PATH3DU model) or once in the configuration, never both
 
 ---
 
@@ -149,6 +151,7 @@ These are the highest-value references to name explicitly in your prompt:
 > - Keep `q_vert` as cell-to-cell vertical flow only; do not add IFACE 5, 6, or 7 boundary contributions to `q_vert`.
 > - If boundary capture data exists, pass the `bc_*` arrays to `hydrate_cell_flows()` instead of using `has_well=True` as a workaround for non-well boundaries.
 > - Do not invent support for IFACE 1, 3, or 4.
+> - Give dispersivity in one place only: either all three per-cell arrays (`disp_long`, `disp_trans_h`, `disp_trans_v`) with only `"method"` in the `dispersion` block, or `alpha_l`, `alpha_th` and `alpha_tv` in the `dispersion` block with the arrays left out. Both, or neither with dispersion on, raises `ValueError`.
 > - If a required array or package cannot be determined from the files, leave an explicit TODO and explain the blocker instead of guessing.
 >
 > Return:
@@ -175,7 +178,7 @@ These are the highest-value references to name explicitly in your prompt:
 >
 > Write Python helper code that does all of the following:
 > 1. Builds `water_table` correctly from layer type.
-> 2. Prepares per-cell arrays for `hydrate_cell_properties()`.
+> 2. Prepares per-cell arrays for `hydrate_cell_properties()`, including the three dispersivity arrays only if the dispersivities are given per cell rather than in the configuration.
 > 3. Prepares `CellFlows` arrays using raw MODFLOW signs where required.
 > 4. Prepares `WaterlooInputs` arrays using Waterloo sign conventions where required.
 > 5. Builds `q_vert` from the cell balance, `sum(face_flow) + q_well + q_other + q_storage`, so that it holds cell-to-cell and boundary flow through the top and bottom faces but not storage; passes storage (MF6: `STO-SS + STO-SY`) in `q_storage`; and builds `q_top` and `q_bot` as total flows through those faces, positive upward (recharge entering the top is negative).
@@ -211,6 +214,7 @@ These are the highest-value references to name explicitly in your prompt:
 > - Use `direction` as either `1.0` or `-1.0` only.
 > - Include every required block: `adaptive`, `dispersion`, `capture`, and the top-level timing fields.
 > - If you omit `capture_radius` or `face_epsilon`, say why.
+> - With dispersion on, give `alpha_l`, `alpha_th` and `alpha_tv` only if the dispersivities are not given per cell to `hydrate_cell_properties()` or `hydrate_sspa_inputs()`, and say which of the two the configuration assumes. Use `Gsde` if per-cell dispersivities differ between cells (`Ito` refuses them), and set `alpha_tv` to 0 for an SSP&A field.
 >
 > Return exactly two sections:
 > 1. `config_dict = {...}`
@@ -247,6 +251,7 @@ These are the highest-value references to name explicitly in your prompt:
 > - misuse of `has_well` for non-well boundaries
 > - invalid `SimulationConfig` fields or enums
 > - wrong indexing assumptions or broken CSR arrays
+> - dispersivities given both per cell and in the configuration, or (with dispersion on) in neither, and `alpha_tv` other than 0 for an SSP&A field
 >
 > Return findings ordered by severity. If you find no issues, say that explicitly and list residual risks or missing validation steps.
 
@@ -282,6 +287,7 @@ These are the highest-value references to name explicitly in your prompt:
 > - missing or wrong `bc_*` arrays
 > - misuse of `has_well` or `is_domain_boundary`
 > - capture settings such as `capture_radius` or `face_epsilon`
+> - per-cell dispersivities given while `"method"` is `"None"` (they are not used; a `UserWarning` says so unless every value is 0)
 
 ---
 
@@ -323,6 +329,7 @@ These are the highest-value references to name explicitly in your prompt:
 > - how heads, porosity, and conductivity will be assembled for `hydrate_sspa_inputs()`
 > - whether wells / line sinks / no-flow boundaries must be supplied as SSP&A drifts
 > - what information is still missing before `fit_sspa()` can be called
+> - whether dispersivities will be given per cell to `hydrate_sspa_inputs()` or in the configuration (never both; the vertical transverse dispersivity must be 0)
 
 ---
 
@@ -363,6 +370,7 @@ These are the highest-value references to name explicitly in your prompt:
 > - Pass exactly one of `hydraulic_conductivity=` or `hhk=` to `hydrate_sspa_inputs()`.
 > - Ensure all SSP&A arrays have shape `(n_cells,)`.
 > - Treat `well_mask` as a boolean per-cell mask, not a list of well IDs.
+> - Give dispersivity in one place only: either all three per-cell arrays (`disp_long`, `disp_trans_h`, `disp_trans_v`) with only `"method"` in the `dispersion` block, or `alpha_l`, `alpha_th` and `alpha_tv` in the `dispersion` block with the arrays left out. Both, or neither with dispersion on, raises `ValueError`. SSP&A fields are two-dimensional, so `alpha_tv` (or `disp_trans_v`) must be 0.
 > - Build the configuration via `mp3du.SimulationConfig.from_json(json.dumps(config_dict))` and call `config.validate()`.
 > - Pass `z` as a local normalized coordinate [0, 1] in `ParticleStart`, NOT a physical elevation.
 > - If a required raster-processing or grid-mapping step cannot be determined from the available files, leave an explicit TODO and explain the blocker instead of guessing.

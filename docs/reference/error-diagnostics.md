@@ -41,18 +41,20 @@ Raised during `SimulationConfig.from_json()` or `SimulationConfig.validate()`. B
 ### Invalid dispersion method
 
 !!! danger "Error"
-    `data did not match any variant of untagged enum`
+    ``unknown variant `Gauss`, expected one of `None`, `Gsde`, `Ito` at line ... column ...``
 
-**Cause:** The `dispersion` object does not match any of the three valid schemas (`"None"`, `"Gsde"`, or `"Ito"`). Common causes: missing `method` field, misspelled method name, or missing required dispersivity parameters.
+    ``missing field `method` at line ... column ...``
 
-**Remedy:** Ensure the `dispersion` object includes a valid `method` field and all required parameters. See [Dispersion Methods](dispersion-methods.md) for the exact schemas.
+**Cause:** The `dispersion` object has a method name other than `"None"`, `"Gsde"` or `"Ito"` (names are case-sensitive), or no `method` field.
+
+**Remedy:** Give a valid `method`. See [Dispersion Methods](dispersion-methods.md) for the exact schemas.
 
 ### Missing required field
 
 !!! danger "Error"
     `missing field "{field_name}"`
 
-**Cause:** A required property is absent from the configuration JSON. All top-level properties and all properties within `adaptive`, `capture`, and `dispersion` objects are required.
+**Cause:** A required property is absent from the configuration JSON. All top-level properties are required, and so are those of the `adaptive` and `capture` objects except `capture.capture_radius` and `capture.face_epsilon`. In the `dispersion` object only `method` is required.
 
 **Remedy:** Add the missing field. See [Schema Reference](schema-reference.md) for the complete list of required properties.
 
@@ -95,11 +97,85 @@ Raised during `SimulationConfig.from_json()` or `SimulationConfig.validate()`. B
 ### Negative dispersivity
 
 !!! danger "Error"
-    `dispersivity values must be non-negative`
+    `alpha_l, alpha_th and alpha_tv must be finite and not negative, got [...]`
 
-**Cause:** One or more dispersivity parameters (`alpha_l`, `alpha_th`, `alpha_tv`) are negative when using Gsde or Ito dispersion.
+**Cause:** One or more of the configuration's dispersivities (`alpha_l`, `alpha_th`, `alpha_tv`) is negative (JSON cannot carry NaN or infinity). For per-cell dispersivities, a value that is negative, NaN or infinite in any cell, inactive and dry cells included, stops `run_simulation()` with a message that names the cell: `disp_long, disp_trans_h and disp_trans_v must be finite and not negative, but cell {i} has (...)`.
 
-**Remedy:** Set all dispersivity values to zero or positive numbers.
+**Remedy:** Set all dispersivity values to zero or positive numbers; in per-cell arrays, fill inactive cells with any valid value, such as 0, or, with the Itô method, with the same values as every other cell.
+
+---
+
+## Dispersivity Errors
+
+The dispersivities are given either per cell (`disp_long`, `disp_trans_h`, `disp_trans_v` to `hydrate_cell_properties()` or `hydrate_sspa_inputs()`) or in the configuration (`alpha_l`, `alpha_th`, `alpha_tv`), never both; see [Giving the Dispersivities](dispersion-methods.md#giving-the-dispersivities). These errors are `ValueError`s. Those raised by `run_simulation()` begin with `config error:` and come before any particle is tracked.
+
+### Dispersivity given twice
+
+!!! danger "Error"
+    `dispersivity is given twice: as alpha_l, alpha_th and alpha_tv in the configuration's dispersion block, and per cell as disp_long, disp_trans_h and disp_trans_v (...). Use one of them: ...`
+
+**Raised by:** `run_simulation()`, with dispersion on.
+
+**Cause:** The configuration's `dispersion` block gives `alpha_l`, `alpha_th` and `alpha_tv`, and the model's inputs also give the per-cell arrays. Before 0.1.6 the arrays were required and then not used, so scripts written for earlier versions give both.
+
+**Remedy:** Remove one of the two. To use the configuration's values in every cell, as 0.1.5 did, leave the three arrays out of `hydrate_cell_properties()` or `hydrate_sspa_inputs()`; this keeps the results of 0.1.5. To use the per-cell values, remove the three numbers from the `dispersion` block (`{"method": "Gsde"}`).
+
+### No dispersivity given
+
+!!! danger "Error"
+    `dispersion is on but no dispersivity is given. Give either alpha_l, alpha_th and alpha_tv in the configuration's dispersion block, ... or disp_long, disp_trans_h and disp_trans_v per cell ..., but not both.`
+
+**Raised by:** `run_simulation()`, with the `Gsde` or `Ito` method.
+
+**Cause:** The `dispersion` block has no `alpha_l`, `alpha_th` or `alpha_tv`, and the model's inputs have no per-cell dispersivity arrays.
+
+**Remedy:** Give the dispersivities in one of the two places.
+
+### Only some of the dispersivities
+
+!!! danger "Error"
+    `the dispersion block gives only some of alpha_l, alpha_th and alpha_tv: give all three for the same dispersivities in every cell, or none of them to use per-cell dispersivities`
+
+    `give all three of disp_long, disp_trans_h and disp_trans_v, or none of them`
+
+**Raised by:** `SimulationConfig.from_json()` and `validate()` for the first; `hydrate_cell_properties()` and `hydrate_sspa_inputs()` for the second.
+
+**Cause:** One or two of the three numbers, or of the three arrays, are given.
+
+**Remedy:** Give all three, or none.
+
+### Itô with dispersivities that differ between cells
+
+!!! danger "Error"
+    `the Ito method needs the same dispersivities in every cell, but cell {i} has (...) and cell 0 has (...). ... use the Gsde method for dispersivities that vary between cells, or give one set in the configuration and leave out the per-cell arrays.`
+
+**Raised by:** `run_simulation()`.
+
+**Cause:** The Itô method takes its drift from differences of the dispersion tensor, which cannot represent a change of dispersivity from one cell to the next.
+
+**Remedy:** Use `"method": "Gsde"`, or give one set of values in the configuration and leave out the per-cell arrays, or give the same values in every cell. The values must be identical, inactive cells included.
+
+### Vertical dispersivity in a two-dimensional field
+
+!!! danger "Error"
+    `this velocity field is two-dimensional (SSP&A), so the vertical transverse dispersivity (alpha_tv, or disp_trans_v per cell) must be 0, but it is {value} ...`
+
+**Raised by:** `run_simulation()` with a field from `fit_sspa()`.
+
+**Cause:** An SSP&A (MEUK) field has no vertical dimension; a vertical transverse dispersivity would only move particles out of the model through its top or bottom. mod-PATH3DU also sets it to 0 for MEUK models. A MEUK script for 0.1.5 with `alpha_tv` other than 0 stops with this error; in 0.1.5 such a value moved particles out of the model.
+
+**Remedy:** Set `alpha_tv`, or every value of `disp_trans_v`, to 0.
+
+### Per-cell dispersivities not used
+
+!!! warning "UserWarning"
+    `dispersion is off ("method": "None"), so the per-cell dispersivities given to hydrate_cell_properties() or hydrate_sspa_inputs() are not used`
+
+**Raised by:** `run_simulation()`.
+
+**Cause:** The model's inputs give per-cell dispersivity arrays with a value other than 0, and the configuration's dispersion method is `"None"`. Arrays of zeros, which scripts for 0.1.5 pass because it required them, give no warning.
+
+**Remedy:** Nothing, if no dispersion is intended. Otherwise set `"method": "Gsde"` (or `"Ito"`).
 
 ---
 

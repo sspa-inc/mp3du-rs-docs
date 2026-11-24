@@ -7,7 +7,7 @@ Python workflow for particle tracking simulations with mod-PATH3DU.
 A complete simulation follows these steps:
 
 1. Build the grid from vertex and centroid data
-2. Hydrate cell properties (porosity, conductivity, dispersivity, etc.)
+2. Hydrate cell properties (porosity, conductivity and, if given per cell, dispersivity)
 3. Hydrate cell flows (heads, face flows, well rates, etc.)
 4. Hydrate Waterloo-specific inputs (geometry and face velocities)
 5. Fit the Waterloo velocity field
@@ -50,13 +50,15 @@ cell_props = mp3du.hydrate_cell_properties(
     retardation=retard_array,  # retardation factor (n_cells,)
     hhk=hhk_array,             # horizontal hydraulic conductivity (n_cells,)
     vhk=vhk_array,            # vertical hydraulic conductivity (n_cells,)
-    disp_long=dl_array,        # longitudinal dispersivity (n_cells,)
-    disp_trans_h=dth_array,    # horizontal transverse dispersivity (n_cells,)
-    disp_trans_v=dtv_array,    # vertical transverse dispersivity (n_cells,)
+    disp_long=dl_array,        # optional: longitudinal dispersivity (n_cells,)
+    disp_trans_h=dth_array,    # optional: horizontal transverse dispersivity (n_cells,)
+    disp_trans_v=dtv_array,    # optional: vertical transverse dispersivity (n_cells,)
 )
 ```
 
 All arrays must be 1D `numpy.ndarray[float64]` with length equal to `grid.n_cells()`.
+
+The three dispersivity arrays are optional, and go together. Give all three to set the dispersivities cell by cell, and leave `alpha_l`, `alpha_th` and `alpha_tv` out of the configuration's `dispersion` block; or leave all three out and give those three numbers in the `dispersion` block, for every cell. With dispersion on, a run stops with a `ValueError` if the dispersivities are given both ways, or neither. See [Giving the Dispersivities](../reference/dispersion-methods.md#giving-the-dispersivities).
 
 ### Hydrating Cell Flows
 

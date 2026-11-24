@@ -304,6 +304,21 @@ class SspaInputs:
         """Boolean mask marking cells that contain a well."""
         ...
 
+    @property
+    def disp_long(self) -> Optional[List[float]]:
+        """Longitudinal dispersivity per cell (L), or None if not given per cell."""
+        ...
+
+    @property
+    def disp_trans_h(self) -> Optional[List[float]]:
+        """Horizontal transverse dispersivity per cell (L), or None if not given per cell."""
+        ...
+
+    @property
+    def disp_trans_v(self) -> Optional[List[float]]:
+        """Vertical transverse dispersivity per cell (L), or None if not given per cell."""
+        ...
+
 
 def hydrate_sspa_inputs(
     heads: npt.NDArray[np.float64],
@@ -311,8 +326,30 @@ def hydrate_sspa_inputs(
     well_mask: npt.NDArray[np.bool_],
     hydraulic_conductivity: Optional[npt.NDArray[np.float64]] = None,
     hhk: Optional[npt.NDArray[np.float64]] = None,
+    disp_long: Optional[npt.NDArray[np.float64]] = None,
+    disp_trans_h: Optional[npt.NDArray[np.float64]] = None,
+    disp_trans_v: Optional[npt.NDArray[np.float64]] = None,
 ) -> SspaInputs:
     """Hydrate SSP&A fitting inputs from NumPy arrays.
+
+    Dispersivity is given in one of two ways, never both:
+
+    - per cell: all three of ``disp_long``, ``disp_trans_h`` and
+      ``disp_trans_v``, with ``alpha_l``, ``alpha_th`` and ``alpha_tv`` left
+      out of the configuration's ``dispersion`` block. For one value
+      everywhere, fill the arrays with it, for example ``numpy.full(n, 10.0)``;
+    - in the configuration: ``alpha_l``, ``alpha_th`` and ``alpha_tv`` in the
+      ``dispersion`` block, the same in every cell, with these three arrays
+      left out.
+
+    Giving only one or two of the arrays raises ``ValueError`` here. With
+    dispersion on, `run_simulation()` raises ``ValueError`` for dispersivity
+    given both ways, or neither. Without dispersion the arrays are not used,
+    and `run_simulation()` issues a ``UserWarning`` saying so unless every
+    value is 0.
+
+    The SSP&A field is two-dimensional, so ``disp_trans_v`` (or ``alpha_tv``)
+    must be 0 in a run with dispersion.
 
     Args:
         heads: Simulated hydraulic heads, shape ``(n_cells,)``.
@@ -324,6 +361,12 @@ def hydrate_sspa_inputs(
             ``hydraulic_conductivity`` or ``hhk``.
         hhk: Alias for ``hydraulic_conductivity`` (legacy shorthand).
             Provide exactly one of ``hydraulic_conductivity`` or ``hhk``.
+        disp_long: Optional longitudinal dispersivity per cell (L),
+            shape ``(n_cells,)``.
+        disp_trans_h: Optional horizontal transverse dispersivity per cell (L),
+            shape ``(n_cells,)``.
+        disp_trans_v: Optional vertical transverse dispersivity per cell (L),
+            shape ``(n_cells,)``; must be 0 for a run with dispersion.
 
     Returns:
         An `SspaInputs` object ready to pass to `fit_sspa()`.
@@ -369,7 +412,8 @@ class CellProperties:
 
     @property
     def retardation(self) -> List[float]:
-        """Retardation factor of each cell (dimensionless, ≥ 1)."""
+        """Retardation factor of each cell (dimensionless, ≥ 1). Not used yet:
+        MP3DU-RS does not apply retardation."""
         ...
 
     @property
@@ -383,18 +427,18 @@ class CellProperties:
         ...
 
     @property
-    def disp_long(self) -> List[float]:
-        """Longitudinal dispersivity of each cell (L)."""
+    def disp_long(self) -> Optional[List[float]]:
+        """Longitudinal dispersivity of each cell (L), or None if not given per cell."""
         ...
 
     @property
-    def disp_trans_h(self) -> List[float]:
-        """Horizontal transverse dispersivity of each cell (L)."""
+    def disp_trans_h(self) -> Optional[List[float]]:
+        """Horizontal transverse dispersivity of each cell (L), or None if not given per cell."""
         ...
 
     @property
-    def disp_trans_v(self) -> List[float]:
-        """Vertical transverse dispersivity of each cell (L)."""
+    def disp_trans_v(self) -> Optional[List[float]]:
+        """Vertical transverse dispersivity of each cell (L), or None if not given per cell."""
         ...
 
     def n_cells(self) -> int:
@@ -516,24 +560,41 @@ def hydrate_cell_properties(
     retardation: npt.NDArray[np.float64],
     hhk: npt.NDArray[np.float64],
     vhk: npt.NDArray[np.float64],
-    disp_long: npt.NDArray[np.float64],
-    disp_trans_h: npt.NDArray[np.float64],
-    disp_trans_v: npt.NDArray[np.float64],
+    disp_long: Optional[npt.NDArray[np.float64]] = None,
+    disp_trans_h: Optional[npt.NDArray[np.float64]] = None,
+    disp_trans_v: Optional[npt.NDArray[np.float64]] = None,
 ) -> CellProperties:
     """Hydrate per-cell physical properties from NumPy arrays.
 
     All arrays must have shape ``(n_cells,)`` and be in cell-ID order.
 
+    Dispersivity is given in one of two ways, never both:
+
+    - per cell: all three of ``disp_long``, ``disp_trans_h`` and
+      ``disp_trans_v``, with ``alpha_l``, ``alpha_th`` and ``alpha_tv`` left
+      out of the configuration's ``dispersion`` block. For one value
+      everywhere, fill the arrays with it, for example ``numpy.full(n, 10.0)``;
+    - in the configuration: ``alpha_l``, ``alpha_th`` and ``alpha_tv`` in the
+      ``dispersion`` block, the same in every cell, with these three arrays
+      left out.
+
+    Giving only one or two of the arrays raises ``ValueError`` here. With
+    dispersion on, `run_simulation()` raises ``ValueError`` for dispersivity
+    given both ways, or neither. Without dispersion the arrays are not used,
+    and `run_simulation()` issues a ``UserWarning`` saying so unless every
+    value is 0.
+
     Args:
         top: Top elevation of each cell (model units).
         bot: Bottom elevation of each cell (model units).
         porosity: Effective porosity (dimensionless, 0–1).
-        retardation: Retardation factor (dimensionless, ≥ 1).
+        retardation: Retardation factor (dimensionless, ≥ 1). Not used yet:
+            MP3DU-RS does not apply retardation.
         hhk: Horizontal hydraulic conductivity (L/T).
         vhk: Vertical hydraulic conductivity (L/T).
-        disp_long: Longitudinal dispersivity (L).
-        disp_trans_h: Horizontal transverse dispersivity (L).
-        disp_trans_v: Vertical transverse dispersivity (L).
+        disp_long: Optional longitudinal dispersivity per cell (L).
+        disp_trans_h: Optional horizontal transverse dispersivity per cell (L).
+        disp_trans_v: Optional vertical transverse dispersivity per cell (L).
 
     Returns:
         A `CellProperties` object ready for use in `fit_waterloo()`.
@@ -734,5 +795,16 @@ def run_simulation(
         distance of the cell centre (weak sink).
 
     A particle whose cell_id is not a cell of the field raises ValueError.
+
+    Dispersivity comes from exactly one place: the configuration's
+    dispersion block (alpha_l, alpha_th, alpha_tv, the same in every cell),
+    or the per-cell arrays given to hydrate_cell_properties() or
+    hydrate_sspa_inputs() (disp_long, disp_trans_h, disp_trans_v). With
+    dispersion on, ValueError is raised before any particle is tracked if
+    it is given both ways or neither, if the Ito method is given per-cell
+    values that differ between cells (use Gsde), or if the vertical
+    transverse dispersivity is not 0 with an SSP&A field. With dispersion
+    off ("method": "None"), per-cell arrays are not used, and a
+    UserWarning says so unless every value is 0.
     """
     ...

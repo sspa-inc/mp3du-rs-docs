@@ -15,10 +15,10 @@
 - TrajectoryResult: particle path and final status
 - GridHandle: loaded unstructured grid
 - WaterlooFieldHandle: fitted velocity field
-- CellProperties: per-cell physical properties
+- CellProperties: per-cell physical properties (dispersivity optional)
 - CellFlows: per-cell flow budget arrays
 - SspaConfig: SSP&A (kriging-based) velocity fitting configuration
-- SspaInputs: hydrated SSP&A inputs (heads, porosity, conductivity, well mask)
+- SspaInputs: hydrated SSP&A inputs (heads, porosity, conductivity, well mask, optional per-cell dispersivity)
 - VelocityFieldHandle: alias for WaterlooFieldHandle (returned by both fit methods)
 
 ## Key Functions
@@ -31,6 +31,16 @@
 - build_grid(): build GridHandle from vertices and centers
 - fit_waterloo(): fit Waterloo velocity field (consumes GridHandle)
 - run_simulation(): run particle tracking on a fitted field
+
+## Dispersivity: per cell or in the configuration, never both
+
+- Per cell: pass all three of disp_long, disp_trans_h, disp_trans_v to hydrate_cell_properties() (MODFLOW models, fit_waterloo) or hydrate_sspa_inputs() (MEUK models, fit_sspa), and give only the method, e.g. {"method": "Gsde"}, as the configuration's dispersion block. For one value everywhere, fill the arrays with it (numpy.full). Every value must be finite and >= 0, inactive cells included (with Ito, inactive cells must also hold the same values as the others).
+- In the configuration: give alpha_l, alpha_th, alpha_tv in the dispersion block, the same in every cell, and leave the three arrays out.
+- With dispersion on, run_simulation() raises ValueError if they are given both ways or neither. Giving only some of the three arrays or numbers is also an error.
+- Ito needs the same values in every cell; use Gsde for dispersivities that vary. MEUK (SSP&A) fields are two-dimensional: alpha_tv / disp_trans_v must be 0.
+- With "method": "None", per-cell arrays are not used (run_simulation() issues a UserWarning unless every value is 0).
+- Upgrading a 0.1.5 script that passes the arrays and the configuration's values: remove the arrays to keep the 0.1.5 results.
+- Details: https://sspa-inc.github.io/mp3du-rs-docs/reference/dispersion-methods/#giving-the-dispersivities
 
 ## Links
 

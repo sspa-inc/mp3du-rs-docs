@@ -95,7 +95,7 @@
       "additionalProperties": false
     },
     "dispersion": {
-      "description": "Dispersion model configuration. Choose `None` for pure advection, `Gsde` for the generalised stochastic differential equation method, or `Ito` for the Itô-calculus formulation. When dispersion is enabled, each particle run is stochastic — run multiple realisations (Monte Carlo) to build concentration fields.",
+      "description": "Dispersion model configuration. Choose `None` for pure advection, `Gsde` for the generalised stochastic differential equation method, or `Ito` for the Itô-calculus formulation. When dispersion is enabled, each particle run is stochastic — run multiple realisations (Monte Carlo) to build concentration fields. The dispersivities are given either here (alpha_l, alpha_th and alpha_tv, all three, the same in every cell) or per cell to hydrate_cell_properties() or hydrate_sspa_inputs(), never both: with dispersion on, a run that gives them both ways, or neither, stops with an error.",
       "oneOf": [
         {
           "type": "object",
@@ -107,23 +107,31 @@
         },
         {
           "type": "object",
-          "required": ["method", "alpha_l", "alpha_th", "alpha_tv"],
+          "required": ["method"],
+          "anyOf": [
+            { "required": ["alpha_l", "alpha_th", "alpha_tv"] },
+            { "not": { "anyOf": [{ "required": ["alpha_l"] }, { "required": ["alpha_th"] }, { "required": ["alpha_tv"] }] } }
+          ],
           "properties": {
             "method": { "const": "Gsde", "description": "Generalised Stochastic Differential Equation dispersion method." },
-            "alpha_l": { "type": "number", "minimum": 0, "description": "Longitudinal dispersivity — spreading along the flow direction, in model length units (e.g. metres). Must be ≥ alpha_th ≥ alpha_tv." },
-            "alpha_th": { "type": "number", "minimum": 0, "description": "Horizontal transverse dispersivity — spreading perpendicular to flow in the horizontal plane, in model length units." },
-            "alpha_tv": { "type": "number", "minimum": 0, "description": "Vertical transverse dispersivity — spreading perpendicular to flow in the vertical direction, in model length units. Typically the smallest of the three." }
+            "alpha_l": { "type": "number", "minimum": 0, "description": "Longitudinal dispersivity — spreading along the flow direction, in model length units (e.g. metres). Usually the largest of the three. Give all three of alpha_l, alpha_th and alpha_tv, for the same dispersivities in every cell, or none of them, with the dispersivities given per cell instead." },
+            "alpha_th": { "type": "number", "minimum": 0, "description": "Horizontal transverse dispersivity — spreading perpendicular to flow in the horizontal plane, in model length units. Give all three of alpha_l, alpha_th and alpha_tv, for the same dispersivities in every cell, or none of them, with the dispersivities given per cell instead." },
+            "alpha_tv": { "type": "number", "minimum": 0, "description": "Vertical transverse dispersivity — spreading perpendicular to flow in the vertical direction, in model length units. Typically the smallest of the three; must be 0 with an SSP&A (MEUK) field, which is two-dimensional. Give all three of alpha_l, alpha_th and alpha_tv, for the same dispersivities in every cell, or none of them, with the dispersivities given per cell instead." }
           },
           "additionalProperties": false
         },
         {
           "type": "object",
-          "required": ["method", "alpha_l", "alpha_th", "alpha_tv"],
+          "required": ["method"],
+          "anyOf": [
+            { "required": ["alpha_l", "alpha_th", "alpha_tv"] },
+            { "not": { "anyOf": [{ "required": ["alpha_l"] }, { "required": ["alpha_th"] }, { "required": ["alpha_tv"] }] } }
+          ],
           "properties": {
             "method": { "const": "Ito", "description": "Itô-calculus dispersion formulation." },
-            "alpha_l": { "type": "number", "minimum": 0, "description": "Longitudinal dispersivity — spreading along the flow direction, in model length units (e.g. metres). Must be ≥ alpha_th ≥ alpha_tv." },
-            "alpha_th": { "type": "number", "minimum": 0, "description": "Horizontal transverse dispersivity — spreading perpendicular to flow in the horizontal plane, in model length units." },
-            "alpha_tv": { "type": "number", "minimum": 0, "description": "Vertical transverse dispersivity — spreading perpendicular to flow in the vertical direction, in model length units. Typically the smallest of the three." }
+            "alpha_l": { "type": "number", "minimum": 0, "description": "Longitudinal dispersivity — spreading along the flow direction, in model length units (e.g. metres). Usually the largest of the three. Give all three of alpha_l, alpha_th and alpha_tv, for the same dispersivities in every cell, or none of them, with the dispersivities given per cell instead. Per-cell dispersivities must be the same in every cell for Ito." },
+            "alpha_th": { "type": "number", "minimum": 0, "description": "Horizontal transverse dispersivity — spreading perpendicular to flow in the horizontal plane, in model length units. Give all three of alpha_l, alpha_th and alpha_tv, for the same dispersivities in every cell, or none of them, with the dispersivities given per cell instead. Per-cell dispersivities must be the same in every cell for Ito." },
+            "alpha_tv": { "type": "number", "minimum": 0, "description": "Vertical transverse dispersivity — spreading perpendicular to flow in the vertical direction, in model length units. Typically the smallest of the three; must be 0 with an SSP&A (MEUK) field, which is two-dimensional. Give all three of alpha_l, alpha_th and alpha_tv, for the same dispersivities in every cell, or none of them, with the dispersivities given per cell instead. Per-cell dispersivities must be the same in every cell for Ito." }
           },
           "additionalProperties": false
         }
@@ -131,7 +139,7 @@
     },
     "retardation_enabled": {
       "type": "boolean",
-      "description": "When true, the solver multiplies each cell's velocity by 1/R where R is the retardation factor from the cell properties. Requires that retardation factors were provided during hydration. Set to false for conservative (non-sorbing) transport."
+      "description": "Reserved for retardation, which MP3DU-RS does not apply yet: the value has no effect. (mod-PATH3DU's RETARDATION option multiplies each cell's porosity by its retardation factor.)"
     },
     "capture": {
       "type": "object",

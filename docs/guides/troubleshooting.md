@@ -101,6 +101,14 @@ See [Schema Reference](../reference/schema-reference.md) for field specification
 
 **Solution:** Correct or remove the key. The message lists the keys accepted at that level of the configuration.
 
+### Dispersivity given twice, or not at all
+
+**Error pattern:** `config error: dispersivity is given twice: ...` or `config error: dispersion is on but no dispersivity is given. ...`, from `run_simulation()`.
+
+**Cause:** The dispersivities come from exactly one place: the per-cell arrays `disp_long`, `disp_trans_h` and `disp_trans_v` given to `hydrate_cell_properties()` or `hydrate_sspa_inputs()`, or `alpha_l`, `alpha_th` and `alpha_tv` in the `dispersion` block. Scripts written for 0.1.5 or earlier give both, because the arrays were required.
+
+**Solution:** Remove one of the two. To keep the results of 0.1.5, which used the configuration's values, leave the arrays out. The other dispersivity errors are listed in [Dispersivity Errors](../reference/error-diagnostics.md#dispersivity-errors).
+
 ## Runtime Errors
 
 ### Particle outside grid

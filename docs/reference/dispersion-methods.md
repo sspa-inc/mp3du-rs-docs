@@ -7,11 +7,87 @@ mod-PATH3DU supports three dispersion modes for stochastic particle tracking. Wh
 | Mode | Stochastic | Parameters Required | Velocity Evaluations | Use Case |
 |------|-----------|--------------------|-----------------------|----------|
 | None | No | — | 0 extra | Advection-only tracking |
-| Gsde | Yes | `alpha_l`, `alpha_th`, `alpha_tv` | Up to 5 extra (the particle and the trial points) | Standard dispersive transport — robust at material interfaces |
-| Ito | Yes | `alpha_l`, `alpha_th`, `alpha_tv` | 8 extra (the particle and the numerical $\nabla \cdot \mathbf{D}$) | Itô SDE with explicit drift correction, for smooth fields |
+| Gsde | Yes | Dispersivities, [per cell or in the configuration](#giving-the-dispersivities) | Up to 5 extra (the particle and the trial points) | Standard dispersive transport — robust at material interfaces |
+| Ito | Yes | Dispersivities, [per cell or in the configuration](#giving-the-dispersivities), the same in every cell | 8 extra (the particle and the numerical $\nabla \cdot \mathbf{D}$) | Itô SDE with explicit drift correction, for smooth fields |
 
 !!! info "Schema Values"
     Dispersion method values in the JSON Schema: `"None"`, `"Gsde"`, `"Ito"`.
+
+---
+
+## Giving the Dispersivities
+
+The three dispersivities, longitudinal ($\alpha_L$), horizontal transverse ($\alpha_{TH}$) and vertical transverse ($\alpha_{TV}$), are lengths in the model's length unit. They are given in one of two ways, and a run uses exactly one of them:
+
+| | Per cell | In the configuration |
+|---|---|---|
+| Given as | the arrays `disp_long`, `disp_trans_h` and `disp_trans_v`, one value per cell | the numbers `alpha_l`, `alpha_th` and `alpha_tv` in the `dispersion` block |
+| Passed to | `hydrate_cell_properties()` for MODFLOW models (`fit_waterloo()`); `hydrate_sspa_inputs()` for MEUK models (`fit_sspa()`) | `SimulationConfig.from_json()` |
+| Values | may differ from cell to cell, by layer or zone; for one value everywhere, fill the arrays with it, for example `np.full(n_cells, 10.0)` | the same in every cell |
+| The other place | `alpha_l`, `alpha_th` and `alpha_tv` left out of the `dispersion` block | the three arrays left out |
+| In mod-PATH3DU | for MODFLOW models, the three dispersivity arrays of the `.p3d` file (labelled `DISPH`, `DISPT` and `DISPV` in the Example 5a input), which mod-PATH3DU uses as the longitudinal, horizontal transverse and vertical transverse dispersivities. mod-PATH3DU has no per-cell dispersivities for MEUK models; MP3DU-RS adds them | for MEUK models, `LONGITUDINAL` and `TRANSVERSE_HORIZONTAL` in the `DISPERSION` block of the model's JSON, which are `alpha_l` and `alpha_th`; mod-PATH3DU sets the vertical transverse dispersivity to 0 |
+
+Per cell, for example 10 m in the top layer and 1 m in the layers below it (`layer` holds the layer index of each cell):
+
+```python
+props = mp3du.hydrate_cell_properties(
+    top=top, bot=bot, porosity=porosity, retardation=retardation, hhk=hhk, vhk=vhk,
+    disp_long=np.where(layer == 0, 10.0, 1.0),
+    disp_trans_h=np.where(layer == 0, 1.0, 0.1),
+    disp_trans_v=np.full(n_cells, 0.01),
+)
+config_dict["dispersion"] = {"method": "Gsde"}   # no alpha_l, alpha_th or alpha_tv
+```
+
+In the configuration, the same values in every cell:
+
+```python
+props = mp3du.hydrate_cell_properties(
+    top=top, bot=bot, porosity=porosity, retardation=retardation, hhk=hhk, vhk=vhk,
+)                                                 # no dispersivity arrays
+config_dict["dispersion"] = {"method": "Gsde", "alpha_l": 10.0, "alpha_th": 1.0, "alpha_tv": 0.01}
+```
+
+For a MEUK model (`fit_sspa()`) the same two ways apply, with `hydrate_sspa_inputs()`, and the vertical transverse dispersivity must be 0:
+
+```python
+inputs = mp3du.hydrate_sspa_inputs(                # per cell
+    heads=heads, porosity=porosity, well_mask=well_mask, hhk=hhk,
+    disp_long=np.full(n_cells, 100.0),
+    disp_trans_h=np.full(n_cells, 10.0),
+    disp_trans_v=np.zeros(n_cells),                 # must be 0 for SSP&A
+)
+config_dict["dispersion"] = {"method": "Gsde"}
+
+inputs = mp3du.hydrate_sspa_inputs(                # or in the configuration
+    heads=heads, porosity=porosity, well_mask=well_mask, hhk=hhk,
+)
+config_dict["dispersion"] = {"method": "Gsde", "alpha_l": 100.0, "alpha_th": 10.0, "alpha_tv": 0.0}
+```
+
+The arrays are in cell-id order, like every other per-cell array, and any values per cell work: from a zone array `zone` that holds 0, 1 or 2 for each cell, for example, `disp_long = np.array([10.0, 1.0, 30.0])[zone]`.
+
+!!! danger "One place at a time"
+    With dispersion on, `run_simulation()` raises `ValueError` before it tracks any particle if the dispersivities are given in both places, or in neither:
+
+    - both: *dispersivity is given twice: as alpha_l, alpha_th and alpha_tv in the configuration's dispersion block, and per cell as disp_long, disp_trans_h and disp_trans_v (to hydrate_cell_properties() or hydrate_sspa_inputs()). Use one of them: ...*
+    - neither: *dispersion is on but no dispersivity is given. ...*
+
+    Giving only one or two of the three arrays, or of the three numbers, is also an error. `SimulationConfig.validate()` sees the configuration alone, so it cannot tell whether the model's inputs also give the dispersivities; `run_simulation()` checks that.
+
+    With `"method": "None"` no dispersivity is used. Per-cell arrays may still be given; if any of their values is not 0, `run_simulation()` issues a `UserWarning` that they are not used. Arrays of zeros, which scripts for 0.1.5 pass because it required them, are accepted silently.
+
+Every value must be finite and not negative, in every cell, inactive and dry cells included. With the GSDE, fill those with any valid value, such as 0; with Itô, give them the same values as every other cell. Two more rules apply:
+
+- **Itô** needs the same dispersivities in every cell. It takes its drift from differences of the dispersion tensor, which cannot represent a change of dispersivity from one cell to the next, so per-cell values that differ between cells are refused, even if they differ only in the last digit or only in inactive cells. Use the GSDE for them, or give one set in the configuration.
+- **MEUK models** (`fit_sspa()`) are two-dimensional, so the vertical transverse dispersivity, `alpha_tv` or `disp_trans_v`, must be 0. mod-PATH3DU also sets it to 0 for MEUK models.
+
+With per-cell values, the dispersion at the particle uses the dispersivities of the particle's cell, and each trial point of the GSDE uses those of the cell it lies in, as in mod-PATH3DU. The GSDE then produces the drift across a change of dispersivity between layers or zones. This follows mod-PATH3DU's algorithm; results with dispersivity zones have not yet been compared with mod-PATH3DU's.
+
+The [error messages](error-diagnostics.md#dispersivity-errors) are listed with their remedies.
+
+!!! warning "Changed in 0.1.6"
+    Before 0.1.6 the configuration's values were used in every cell, and the per-cell arrays, which `hydrate_cell_properties()` required, were not used. A script that passes the arrays and also gives the configuration's values now stops with the *given twice* error. To keep the results of 0.1.5, which used the configuration's values, remove the arrays; scripts that passed arrays of zeros, as the earlier examples did, need nothing else. To use the per-cell values instead, remove `alpha_l`, `alpha_th` and `alpha_tv` from the `dispersion` block. A MEUK script with `alpha_tv` other than 0 now stops too; set it to 0 (in 0.1.5 it moved particles out of the model).
 
 ---
 
@@ -44,7 +120,7 @@ Generalized stochastic differential equation (GSDE) of LaBolle et al. (2000), in
 | Transverse horizontal dispersivity | `alpha_th` | number | ≥ 0 | Dispersivity perpendicular to flow in the horizontal plane [L] |
 | Transverse vertical dispersivity | `alpha_tv` | number | ≥ 0 | Dispersivity perpendicular to flow in the vertical plane [L] |
 
-The dispersivities are uniform: they come from the configuration, and the per-cell values given to `hydrate_cell_properties()` are not used.
+The three numbers are given together or not at all: all three for the same dispersivities in every cell, or none of them, with the dispersivities given per cell instead (see [Giving the Dispersivities](#giving-the-dispersivities)).
 
 ### Mathematical Formulation
 
@@ -62,7 +138,7 @@ $$\Delta\mathbf{X}_{disp} = \tfrac{1}{2}\sqrt{\frac{\theta(\mathbf{X}+\Delta\mat
 
 For isotropic dispersion this reduces to $\Delta\mathbf{X}_{disp} = \mathbf{S}(\mathbf{X}+\Delta\mathbf{Y})\,\Delta\mathbf{W}$ (eq. 11a). Because no gradient is taken, jumps in dispersivity, porosity or velocity between cells are handled; the mean of the step is $\theta^{-1}\nabla\cdot(\theta\mathbf{D})\,\Delta t$.
 
-**Trial points** are located by position: in the particle's layer, then in the wet cell below or above if the point lies outside the cell's saturated thickness, passing through dry cells as mod-PATH3DU does. If the first trial point $\mathbf{X}+\Delta\mathbf{Y}$ is outside the model, the step has no dispersive displacement; if a point $\mathbf{X}+\Delta\mathbf{U}_n$ is outside, the dispersion at the particle is used for it.
+**Trial points** are located by position: in the particle's layer, then in the wet cell below or above if the point lies outside the cell's saturated thickness, passing through dry cells as mod-PATH3DU does. Each trial point takes the dispersivities and porosity of the cell it lies in. If the first trial point $\mathbf{X}+\Delta\mathbf{Y}$ is outside the model, the step has no dispersive displacement; if a point $\mathbf{X}+\Delta\mathbf{U}_n$ is outside, the dispersion at the particle is used for it.
 
 **Backward tracking** reverses advection but not the dispersive displacement: the backward process has the drift of the forward one.
 
@@ -90,7 +166,7 @@ Its principal directions are the flow direction $\mathbf{e}_0 = \mathbf{v}/|\mat
 ```
 
 !!! tip
-    GSDE is preferred over Itô when simulations involve heterogeneous media with sharp property contrasts, or variable porosity, because it does not compute $\nabla \cdot \mathbf{D}$ numerically.
+    GSDE is preferred over Itô when simulations involve heterogeneous media with sharp property contrasts, or variable porosity, because it does not compute $\nabla \cdot \mathbf{D}$ numerically. It is the method to use for dispersivities that differ between cells, which Itô refuses.
 
 ### Cost
 
@@ -113,6 +189,8 @@ Itô-Fokker-Planck dispersion method (LaBolle et al., 1996; Salamon et al., 2006
 | Longitudinal dispersivity | `alpha_l` | number | ≥ 0 | Dispersivity parallel to flow direction [L] |
 | Transverse horizontal dispersivity | `alpha_th` | number | ≥ 0 | Dispersivity perpendicular to flow in the horizontal plane [L] |
 | Transverse vertical dispersivity | `alpha_tv` | number | ≥ 0 | Dispersivity perpendicular to flow in the vertical plane [L] |
+
+As for the GSDE, the three numbers are given together or not at all, with the dispersivities then given per cell; per-cell values must be the same in every cell for Itô (see [Giving the Dispersivities](#giving-the-dispersivities)).
 
 ### Mathematical Formulation
 
@@ -138,7 +216,7 @@ $$D_{ij} = D_L \, e_{1i} e_{1j} + D_{TH} \, e_{2i} e_{2j} + D_{TV} \, e_{3i} e_{
 
 where $(\mathbf{e}_1, \mathbf{e}_2, \mathbf{e}_3)$ is the velocity-aligned orthonormal frame below. It equals the GSDE's tensor when the flow is horizontal; when $v_z \neq 0$ the transverse directions differ.
 
-**Limits:** the drift is $\nabla \cdot \mathbf{D}$, without the porosity ($\theta^{-1}\nabla \cdot (\theta\mathbf{D})$ in general), and the central differences straddle cell faces where the velocity, and so $\mathbf{D}$, can jump. Use the GSDE where porosity varies or the velocity field is discontinuous.
+**Limits:** the drift is $\nabla \cdot \mathbf{D}$, without the porosity ($\theta^{-1}\nabla \cdot (\theta\mathbf{D})$ in general), and the central differences straddle cell faces where the velocity, and so $\mathbf{D}$, can jump. Use the GSDE where porosity varies or the velocity field is discontinuous. For the same reason Itô refuses per-cell dispersivities that differ between cells: such a run stops with a `ValueError`.
 
 !!! info "Changed in 0.1.5"
     The tensor is built from the velocity at the start of the step, as the Itô scheme requires, instead of the step's average velocity; positions are global (z an elevation) and the vertical result is converted to the cell's local z; backward tracking keeps the sign of the drift. Results change slightly.

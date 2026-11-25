@@ -128,6 +128,15 @@ mod-PATH3DU uses the **Itô convention** because it pairs naturally with the exp
 !!! tip "Which method should I use?"
     Start with **GSDE** for most applications. It is more robust at material interfaces and computationally cheaper, and it takes dispersivities that differ between cells, which Itô refuses. Use **Ito** when you need exact Fokker–Planck consistency or are validating against analytical solutions that assume the Itô convention.
 
+## Step Size
+
+With dispersion, results depend on the step size as well as on the number of particles. The random-walk part of each step is computed from the start of the step, so it is accurate only to first order in the step size, and the solver's `tolerance` controls only the advective part. Away from wells the step is usually set by `max_dt`; near them, by the advective error test.
+
+The effect is usually small. In the MEUK example (Example 5a, 144,000 particles), reducing `max_dt` from 1,000 to 250 days changed the fraction of particles still in the aquifer at 23,363 days by less than one percentage point. That is still several times the Monte Carlo error of such a run, so:
+
+- to check a result, rerun it with `max_dt` reduced by a factor of four and compare;
+- when comparing with another code, or with an earlier run, use the same solver, `tolerance` and `max_dt`; otherwise differences in the step sizes can look like differences in the method.
+
 ## Configuration
 
 Dispersion is configured in the `SimulationConfig` JSON. The dispersivities are given there, as below, for every cell, or per cell to `hydrate_cell_properties()` or `hydrate_sspa_inputs()` with only `"method"` in the JSON: one or the other, never both (see [Giving the Dispersivities](../reference/dispersion-methods.md#giving-the-dispersivities)).

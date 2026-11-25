@@ -136,7 +136,7 @@ $$\Delta\mathbf{Y} = \mathbf{S}(\mathbf{X})\,\Delta\mathbf{W}, \qquad \Delta\mat
 
 $$\Delta\mathbf{X}_{disp} = \tfrac{1}{2}\sqrt{\frac{\theta(\mathbf{X}+\Delta\mathbf{Y})}{\theta(\mathbf{X})}}\;\mathbf{S}(\mathbf{X}+\Delta\mathbf{Y})\,\Delta\mathbf{W} \;+\; \tfrac{1}{2}\sum_n \mathbf{e}_n(\mathbf{X})\left[\mathbf{e}_n(\mathbf{X}) \cdot \sqrt{\frac{\theta(\mathbf{X}+\Delta\mathbf{U}_n)}{\theta(\mathbf{X})}}\;\mathbf{S}(\mathbf{X}+\Delta\mathbf{U}_n)\,\Delta\mathbf{W}\right]$$
 
-For isotropic dispersion this reduces to $\Delta\mathbf{X}_{disp} = \mathbf{S}(\mathbf{X}+\Delta\mathbf{Y})\,\Delta\mathbf{W}$ (eq. 11a). Because no gradient is taken, jumps in dispersivity, porosity or velocity between cells are handled; the mean of the step is $\theta^{-1}\nabla\cdot(\theta\mathbf{D})\,\Delta t$.
+For isotropic dispersion this reduces to $\Delta\mathbf{X}_{disp} = \mathbf{S}(\mathbf{X}+\Delta\mathbf{Y})\,\Delta\mathbf{W}$ (eq. 11a). Because no gradient is taken, jumps in dispersivity or velocity between cells are handled. Where porosity varies smoothly the mean of the step is $\theta^{-1}\nabla\cdot(\theta\mathbf{D})\,\Delta t$; at a jump in porosity between layers it is not, and too many particles collect on the side of lower porosity (see the known issue in [Layers and Boundaries](../concepts/dispersion-theory.md#layers-and-boundaries)).
 
 **Trial points** are located by position: in the particle's layer, then in the wet cell below or above if the point lies outside the cell's saturated thickness, passing through dry cells as mod-PATH3DU does. Each trial point takes the dispersivities and porosity of the cell it lies in. If the first trial point $\mathbf{X}+\Delta\mathbf{Y}$ is outside the model, the step has no dispersive displacement; if a point $\mathbf{X}+\Delta\mathbf{U}_n$ is outside, the dispersion at the particle is used for it.
 
@@ -166,7 +166,7 @@ Its principal directions are the flow direction $\mathbf{e}_0 = \mathbf{v}/|\mat
 ```
 
 !!! tip
-    GSDE is preferred over Itô when simulations involve heterogeneous media with sharp property contrasts, or variable porosity, because it does not compute $\nabla \cdot \mathbf{D}$ numerically. It is the method to use for dispersivities that differ between cells, which Itô refuses.
+    GSDE is preferred over Itô where dispersivity or velocity changes sharply, or porosity varies, because it does not compute $\nabla \cdot \mathbf{D}$ numerically. It is the method to use for dispersivities that differ between cells, which Itô refuses. At a jump in porosity between layers it has a known bias (see [Layers and Boundaries](../concepts/dispersion-theory.md#layers-and-boundaries)).
 
 ### Cost
 
@@ -216,7 +216,7 @@ $$D_{ij} = D_L \, e_{1i} e_{1j} + D_{TH} \, e_{2i} e_{2j} + D_{TV} \, e_{3i} e_{
 
 where $(\mathbf{e}_1, \mathbf{e}_2, \mathbf{e}_3)$ is the velocity-aligned orthonormal frame below. It equals the GSDE's tensor when the flow is horizontal; when $v_z \neq 0$ the transverse directions differ.
 
-**Limits:** the drift is $\nabla \cdot \mathbf{D}$, without the porosity ($\theta^{-1}\nabla \cdot (\theta\mathbf{D})$ in general), and the central differences straddle cell faces where the velocity, and so $\mathbf{D}$, can jump. Use the GSDE where porosity varies or the velocity field is discontinuous. For the same reason Itô refuses per-cell dispersivities that differ between cells: such a run stops with a `ValueError`.
+**Limits:** the drift is $\nabla \cdot \mathbf{D}$, without the porosity ($\theta^{-1}\nabla \cdot (\theta\mathbf{D})$ in general), and the central differences straddle cell faces where the velocity, and so $\mathbf{D}$, can jump. Use the GSDE where porosity varies or the velocity field is discontinuous (it too has a known bias at a jump in porosity; see [Layers and Boundaries](../concepts/dispersion-theory.md#layers-and-boundaries)). For the same reason Itô refuses per-cell dispersivities that differ between cells: such a run stops with a `ValueError`.
 
 !!! info "Changed in 0.1.5"
     The tensor is built from the velocity at the start of the step, as the Itô scheme requires, instead of the step's average velocity; positions are global (z an elevation) and the vertical result is converted to the cell's local z; backward tracking keeps the sign of the drift. Results change slightly.

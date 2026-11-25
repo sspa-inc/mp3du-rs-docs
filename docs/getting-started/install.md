@@ -22,7 +22,7 @@ pip install numpy
 pip install mp3du-py --index-url https://sspa-inc.github.io/mp3du-rs/simple/
 ```
 
-To install a particular version, add it to the package name, for example `mp3du-py==0.1.6`. To update an existing installation to the latest version, add `--upgrade` to the second command. Neither changes the installed NumPy.
+To install a particular version, add it to the package name, for example `mp3du-py==0.1.7`. To update an existing installation to the latest version, add `--upgrade` to the second command. Neither changes the installed NumPy.
 
 !!! warning "Keep the two commands separate"
     Run the two commands as given. Do not combine them into one, and do not replace `--index-url` with `--extra-index-url`. `mp3du-py` is not on PyPI, and a pip command that searches PyPI as well as SSP&A's index takes the highest version it finds in either, so a package published on PyPI under the same name could be installed in place of mod-PATH3DU.
@@ -46,7 +46,7 @@ To install from a file instead, download the wheel for your platform from the [R
 
 ```bash
 pip install numpy
-pip install path/to/mp3du_py-0.1.6-cp38-abi3-win_amd64.whl
+pip install path/to/mp3du_py-0.1.7-cp38-abi3-win_amd64.whl
 ```
 
 The end of each wheel's name gives its platform: `win_amd64` (Windows), `macosx_11_0_arm64` (macOS on Apple Silicon), `macosx_10_12_x86_64` (macOS on Intel) and `manylinux_2_17_x86_64.manylinux2014_x86_64` (Linux).
@@ -60,7 +60,7 @@ import mp3du
 print(mp3du.version())
 ```
 
-You should see a version string like `0.1.6`. If the import succeeds, the installation is complete.
+You should see a version string like `0.1.7`. If the import succeeds, the installation is complete.
 
 !!! tip
     If the import fails with `ModuleNotFoundError`, ensure you are in the correct virtual environment and the package is installed (`pip list | findstr mp3du` on Windows, `pip list | grep mp3du` on macOS and Linux).

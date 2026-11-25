@@ -283,9 +283,11 @@ See [IFACE & Boundary Capture](../concepts/iface-boundary-capture.md) for the fu
 
 ### Unexpected `termination_reason` for IFACE 7 cells
 
-**Cause:** IFACE 7 routes flow to `q_top` (with negation) for the velocity field, but uses the `INTERNAL` capture classification — not `TopFace`.
+**Cause:** For the velocity field, IFACE 7 flow is routed to `q_top` like IFACE 6 (negated there, because `q_top` is positive upward); for capture, IFACE 7 uses the `INTERNAL` classification, not `TopFace`. The `bc_flow` passed for capture keeps MODFLOW's sign.
 
 **Solution:** This is the intended behaviour. IFACE 7 represents an internal BC without a specific well, so capture triggers immediately on cell entry (like IFACE 2), but the flow contribution goes to `q_top` for velocity reconstruction. The `termination_reason` will show the BC type name.
+
+Up to 0.1.6 the capture of IFACE 7 entries was reversed: `hydrate_cell_flows()` changed the sign of their `bc_flow`, so a sink did not capture forward particles, which passed through its cell, and a source captured them. Backward tracking was reversed the same way. Results with IFACE 7 boundaries change in 0.1.7.
 
 ## See Also
 

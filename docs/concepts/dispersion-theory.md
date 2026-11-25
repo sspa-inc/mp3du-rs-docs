@@ -83,7 +83,7 @@ $$
 d\mathbf{X} = \left(\mathbf{V} + \nabla \cdot \mathbf{D}\right) dt + \mathbf{B} \, d\mathbf{W}
 $$
 
-The additional drift correction $\nabla \cdot \mathbf{D}$ ensures that the particle density evolves according to the Fokker–Planck equation — the correct macroscopic transport equation. MP3DU-RS takes the porosity as uniform here; where it varies, the drift is $\theta^{-1}\nabla \cdot (\theta\mathbf{D})$, which the GSDE produces.
+The additional drift correction $\nabla \cdot \mathbf{D}$ ensures that the particle density evolves according to the Fokker–Planck equation — the correct macroscopic transport equation. MP3DU-RS takes the porosity as uniform here; where it varies smoothly, the drift is $\theta^{-1}\nabla \cdot (\theta\mathbf{D})$, which the GSDE produces. At a jump in porosity between layers the GSDE does not produce it (see the known issue in [Layers and Boundaries](#layers-and-boundaries)).
 
 ### Drift Correction
 
@@ -132,10 +132,44 @@ mod-PATH3DU uses the **Itô convention** because it pairs naturally with the exp
 
 With dispersion, results depend on the step size as well as on the number of particles. The random-walk part of each step is computed from the start of the step, so it is accurate only to first order in the step size, and the solver's `tolerance` controls only the advective part. Away from wells the step is usually set by `max_dt`; near them, by the advective error test.
 
-The effect is usually small. In the MEUK example (Example 5a, 144,000 particles), reducing `max_dt` from 1,000 to 250 days changed the fraction of particles still in the aquifer at 23,363 days by less than one percentage point. That is still several times the Monte Carlo error of such a run, so:
+Where wells capture particles, the dependence was large and slow to vanish up to 0.1.6, which took the advection of a step from where the step started. Since 0.1.7 the dispersive displacement comes first and the advection follows from where the particle lands (see [Layers and Boundaries](#layers-and-boundaries)), and in the MEUK example the dependence is small. Example 5a, 144,000 particles, `DormandPrince`, fraction of particles captured by 23,363 days:
 
-- to check a result, rerun it with `max_dt` reduced by a factor of four and compare;
-- when comparing with another code, or with an earlier run, use the same solver, `tolerance` and `max_dt`; otherwise differences in the step sizes can look like differences in the method.
+| `max_dt` | 0.1.7 | Order of 0.1.6, with the first-stage fix of 0.1.7 |
+|---|---|---|
+| 1,000 days | 6.0% | 4.7% |
+| 250 days | 5.8% | 5.3% |
+| 62.5 days | 5.8% | 5.7%, still rising |
+
+MT3D gives 5.6%. mod-PATH3DU 2.1.9, with its own settings (step-doubling Runge-Kutta, no step limit), gives 5.0%, as MP3DU-RS 0.1.6 did; MP3DU-RS 0.1.7 gives 6.0% with those settings. Released 0.1.6 gave 5.2% with `DormandPrince` and a 1,000-day `max_dt`.
+
+A dispersive displacement is not checked for capture in the cells it passes through, only the advective steps after it where each ends. With long steps a particle can therefore cross a well's capture zone uncounted.
+
+So:
+
+- **To check a result,** rerun it with `max_dt` reduced by a factor of four. Repeat until it stops changing within the Monte Carlo error.
+- **When comparing with another code,** or with an earlier run, use the same solver, `tolerance` and `max_dt`. Otherwise differences in the step sizes can look like differences in the method.
+
+A test of the boundaries: a column of length $L = 10$ with uniform upward flow at $v = 1$, initially full of solute, compared with a finite-difference solution with Danckwerts conditions (no total flux through the face where clean water enters, no dispersive flux through the face where it leaves), at Peclet numbers $vL/D$ of 10 and 1 ($\alpha_L$ = 1 and 10). The transit time is $L/v$ = 10 days. With steps of a twentieth of the transit time, the solute left after one transit time is 1.4% too low at a Peclet number of 10 and 0.4% too low at 1, and the difference vanishes as the step shrinks. In this uniform flow the result does not depend on how the column is divided into layers. With very long steps it is far off: 22% too little solute at a Peclet number of 1 with `max_dt` 1000 in a review run.
+
+## Layers and Boundaries
+
+Since 0.1.7 a step with dispersion has two parts (a step here is the interval between two dispersive displacements; the advective motion within it can take several solver steps):
+
+- **The dispersive displacement comes first,** computed where the particle is. It is not cut at the first face it crosses, because that would shrink its random part: its vertical part is followed through every cell it reaches, measured in each cell's saturated thickness. At a face with no wet cell beyond (the top or bottom of the model, a dry cell, or the water table) it is reflected, as a random walk must be at a boundary through which no solute disperses.
+- **The particle then moves by advection from where it lands,** for the length of the step, as a particle without dispersion would (see [Steps That Reach a Top or Bottom Face](adaptive-stepping.md#steps-that-reach-a-top-or-bottom-face)). It leaves through a face with no wet cell beyond only where the flow carries it out, as with the usual zero-gradient (Danckwerts) outflow condition. A boundary on that face can capture it; otherwise it ends `ExitedDomain`.
+
+The next displacement comes when the step's full length has passed, however the advective motion was divided at faces, and the length of the next step follows the solver's error control as if there were no faces. Where the flow is uniform, the result therefore does not depend on how the model is divided into layers. Where the velocity varies within the cells and the steps may grow (`initial_dt` below `max_dt`), the steps in thin layers, where most advective steps are cut at a face, stay near `initial_dt`, while in a thick layer they follow the solver's error control. Keep `initial_dt` no larger than a step you would accept for the dispersion. A particle that reaches a face where the vertical flow converges from both sides ends there `Stagnated`, with or without dispersion.
+
+Before 0.1.7, a step that spanned more than one layer stopped on the next layer's far face, which reduced the vertical spread in thin layers. A particle dispersed through a no-flow top or bottom was lost.
+
+!!! warning "Known issue: an empty strip next to an inflow face"
+    Where water enters through a face with no wet cell beyond, such as the bottom of a model with upward flow or a water table with recharge, the dispersive part of a step is reflected at the face and the advective part then moves the particle away from it. No particle therefore ends a step closer to the face than that step's advective displacement. In the test column above, with steps of a twentieth of the transit time, that strip was empty where the exact solution holds 3.6% of the solute then in the column (Peclet number 1). The strip narrows as the step shrinks.
+
+!!! warning "Known issue: the GSDE next to a face where the dispersion changes with depth"
+    A trial point of the GSDE beyond a top or bottom face with no wet cell beyond is evaluated at the face. Where the dispersion coefficient changes with depth, an evenly mixed solute then does not stay evenly mixed next to the face: in a test with the vertical dispersion doubling from bottom to top, the density in the bottom tenth of the column was 5% too high with steps of 1 and 12% with steps of 5. In the column test with the velocity rising by 10% per unit height and a Peclet number of 1, the solute left after one transit time was 31% too high with steps of 0.5 and 13% with steps of 0.1. The Itô method keeps an evenly mixed solute evenly mixed (within 1%), and was within 3.5% in that column test.
+
+!!! warning "Known issue: jumps in porosity"
+    At a jump in porosity between layers, the GSDE does not keep an evenly mixed solute evenly mixed: layers of lower porosity collect too many particles. In a test across one interface, with porosity four times higher below, 77.8% of the particles ended below, against an exact 80%, whatever the step size. Jumps in dispersivity or velocity alone are handled. This has been so since 0.1.5 and is not yet fixed.
 
 ## Configuration
 

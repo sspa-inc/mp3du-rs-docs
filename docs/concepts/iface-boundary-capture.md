@@ -119,7 +119,9 @@ Status: `CapturedByWell`.
 ### 3. Internal (IFACE 2, 7)
 
 If the cell has an IFACE 2 or 7 entry and the flow direction indicates a
-sink, capture triggers immediately on cell entry.
+sink, capture triggers immediately on cell entry. Up to 0.1.6, IFACE 7 entries
+captured where the flow indicated a source instead (see
+[Troubleshooting](../guides/troubleshooting.md#unexpected-termination_reason-for-iface-7-cells)).
 
 Status: `CapturedByBoundary`.
 

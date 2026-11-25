@@ -104,25 +104,23 @@ For the **validation workflow** (with dispersion, Monte Carlo repeats):
 - Each particle is run many times (100–5000 realisations) with random dispersion, for each tracking set-up.
 - The endpoints of the particles still in the aquifer are binned into a concentration grid and compared against the mod-PATH3DU reference. Particles captured by the wells are excluded, as in the reference, so both grids show the mass remaining in the aquifer.
 
-The fraction of particles still in the aquifer, with MP3DU-RS 0.1.5 at 500 repeats:
+The fraction of particles still in the aquifer, with MP3DU-RS 0.1.7 at 1,000 repeats (144,000 particles):
 
 | | 5,044 days | 23,363 days | 50,000 days |
 |---|---|---|---|
 | mod-PATH3DU 2.1.9 (reference, 5,000 repeats) | 1.000 | 0.950 | 0.0252 |
-| MP3DU-RS, `cpp_input` | 1.000 | 0.951 | 0.0257 |
-| MP3DU-RS, `dopri_1000` | 1.000 | 0.949 | 0.0270 |
+| MP3DU-RS 0.1.7, `cpp_input` | 1.000 | 0.940 | 0.0292 |
+| MP3DU-RS 0.1.7, `dopri_1000` | 1.000 | 0.940 | 0.0295 |
 | MT3D | — | 0.944 | 0.029 |
 
-The Pearson correlation and the normalised RMSE of the concentrations against the reference:
+The Pearson correlation and the normalised RMSE of the concentrations against the reference, at 1,000 repeats:
 
-| Repeats | Set-up | 5,044 days | 23,363 days | 50,000 days |
-|---|---|---|---|---|
-| 100 | `cpp_input` | 0.993, 0.003 | 0.964, 0.016 | 0.57, 0.049 |
-| 100 | `dopri_1000` | 0.993, 0.004 | 0.962, 0.017 | 0.54, 0.055 |
-| 500 | `cpp_input` | 0.999, 0.002 | 0.992, 0.008 | 0.82, 0.023 |
-| 500 | `dopri_1000` | 0.999, 0.002 | 0.992, 0.008 | 0.81, 0.025 |
+| Set-up | 5,044 days | 23,363 days | 50,000 days |
+|---|---|---|---|
+| `cpp_input` | 0.999, 0.001 | 0.995, 0.006 | 0.89, 0.021 |
+| `dopri_1000` | 0.999, 0.001 | 0.995, 0.006 | 0.90, 0.021 |
 
-With the `cpp_input` set-up, the mass in the aquifer agrees with the reference to within the Monte Carlo noise: +0.1% at 23,363 days and +2% at 50,000 days at 500 repeats, against a sampling noise of about 2% at 50,000 days. With `dopri_1000`, MP3DU-RS leaves about 7% more mass in the aquifer at 50,000 days. mod-PATH3DU run with the same Dormand-Prince settings gives 0.0252, so the difference lies in the step control of the two Dormand-Prince implementations, not in the dispersion. The correlation at the late times rises with the number of repeats: at 50,000 days only about 2.5% of the particles remain in the aquifer, so the binned concentrations are noisy unless the number of repeats is large.
+Since 0.1.7 MP3DU-RS does not agree with the mod-PATH3DU reference in the mass left in the aquifer: about 1% less at 23,363 days and 16% (`cpp_input`) to 17% (`dopri_1000`) more at 50,000 days, well beyond the Monte Carlo noise (about 2% at 50,000 days). The concentrations are distributed alike (the correlations above). The difference comes from the order of the two parts of a step with dispersion: 0.1.7 makes the dispersive displacement first and follows the advection from where the particle lands, mod-PATH3DU takes the advection from where the step starts. MP3DU-RS 0.1.5 and 0.1.6, which did the same as mod-PATH3DU, agreed with it within the noise (0.951 and 0.0257 at 500 repeats with `cpp_input`). Against MT3D, 0.1.7 is about as far below at 23,363 days as mod-PATH3DU is above, and closer at 50,000 days; its result also changes little with the step size (0.942 with a `max_dt` of 250 or 62.5 days; see [Step Size](../concepts/dispersion-theory.md#step-size)). MT3D has errors of its own, and neither particle code has been shown to converge on this model. The correlation at the late times rises with the number of repeats: at 50,000 days only about 3% of the particles remain in the aquifer, so the binned concentrations are noisy unless the number of repeats is large.
 
 !!! note "Earlier versions of this comparison"
     Before MP3DU-RS 0.1.5 this page compared with reference shapefiles made in 2018, before mod-PATH3DU's dispersion was corrected in November 2026, and reported about 35% less mass in the aquifer at 50,000 days. That difference came from the reference, which lacked the dispersive drift and left 0.043 of the particles in the aquifer.

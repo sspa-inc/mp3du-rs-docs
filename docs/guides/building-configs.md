@@ -102,7 +102,7 @@ All top-level fields and most nested fields are required. The capture block may 
 | `direction` | number | `1.0` or `-1.0` | Forward or backward tracking |
 | `initial_dt` | number | > 0 | Initial time step |
 | `max_dt` | number | > 0 | Maximum time step |
-| `retardation_enabled` | boolean | — | Reserved for retardation, which MP3DU-RS does not apply yet: the value has no effect |
+| `retardation_enabled` | boolean | — | Reserved for retardation, which MP3DU-RS does not apply yet: the value has no effect, and `true` gives a `UserWarning` (since 0.1.7) |
 | `adaptive` | object | See below | Adaptive stepping parameters |
 | `dispersion` | object | See below | Dispersion configuration |
 | `capture` | object | See below | Termination criteria |

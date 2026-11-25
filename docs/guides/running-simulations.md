@@ -327,9 +327,9 @@ Each record dictionary from `to_records()` contains:
 | `CapturedByWell` | Particle reached a well (IFACE 0) within capture radius |
 | `CapturedByBoundary` | Particle terminated by an IFACE 2/5/6/7 boundary condition |
 | `CapturedAtModelEdge` | Particle reached a domain-edge cell (`is_domain_boundary = True`) |
-| `ExitedDomain` | Particle left the grid domain, or reached its edge with the flow still pointing outward |
+| `ExitedDomain` | Particle left the grid domain, or reached its edge with the flow still pointing outward. Since 0.1.7, a particle that reaches the top or bottom of the model, or a face with a dry cell beyond, stops on that face and ends here unless a boundary there captures it |
 | `TimeLimitReached` | `capture.max_time` was reached (tracking stops at exactly that time), or `capture.max_steps` was reached; `termination_reason` says which |
-| `Stagnated` | Velocity below `stagnation_velocity` for `stagnation_limit` consecutive steps |
+| `Stagnated` | Velocity below `stagnation_velocity` for `stagnation_limit` consecutive steps, or (since 0.1.7) held on a layer face where the vertical flow converges from both sides |
 | `SolverFailed` | A solver error occurred (check error diagnostics) |
 
 !!! info "termination_reason"
@@ -337,8 +337,15 @@ Each record dictionary from `to_records()` contains:
     includes the BC type name from `bc_type_names`, e.g.,
     `"Internal sink/source: CONSTANT HEAD"` or `"Internal well: WELLS"`.
     `CapturedAtModelEdge` gives `"Model Boundary"`, and the time limit gives
-    `"Time limit reached"`. For `ExitedDomain` and `SolverFailed` it is an
-    empty string, so test `final_status` rather than `termination_reason`.
+    `"Time limit reached"`. Since 0.1.7, a particle that stops on a top or
+    bottom face with no wet cell beyond (`ExitedDomain`) gives
+    `"No wet cell beyond the top face"` (or bottom face), a dispersing particle
+    in a cell with no saturated thickness (`ExitedDomain`) gives
+    `"The particle's cell has no saturated thickness"`, and one held on a
+    layer face (`Stagnated`) gives a reason starting `"Stuck on a layer face"`.
+    A particle `Stagnated` by low velocity gives `"Stagnation limit reached"`.
+    Otherwise, for `ExitedDomain` and `SolverFailed`, it is an empty string,
+    so test `final_status` rather than `termination_reason`.
 
 ## Error Handling
 

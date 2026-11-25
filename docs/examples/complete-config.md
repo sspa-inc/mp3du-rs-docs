@@ -19,7 +19,7 @@ A fully-specified `SimulationConfig` JSON exercising all available options, incl
 | `direction` | `1.0` | Forward tracking (in the direction of flow) |
 | `initial_dt` | `1.0` | Initial time step of 1 day |
 | `max_dt` | `100.0` | Maximum time step of 100 days |
-| `retardation_enabled` | `false` | Reserved for retardation, which MP3DU-RS does not apply yet: the value has no effect |
+| `retardation_enabled` | `false` | Reserved for retardation, which MP3DU-RS does not apply yet: the value has no effect, and `true` gives a `UserWarning` (since 0.1.7) |
 
 ### Adaptive Stepping
 

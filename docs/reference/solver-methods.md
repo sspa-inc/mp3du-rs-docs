@@ -13,6 +13,11 @@ mod-PATH3DU provides six Runge-Kutta ODE integration solvers for computing parti
 | VernerRobust | 6(5) | 9 | Yes | Yes | Yes | High accuracy, robust error estimation |
 | VernerEfficient | 6(5) | 9 | Yes | Yes | Yes | High accuracy (see the note below) |
 
+!!! warning "Waterloo fields: `DormandPrince` and `CashKarp`"
+    On Waterloo fields, whose velocity jumps between cells, `DormandPrince` and `CashKarp` can be off by several percent at a tolerance of 1e-6, probably because their error estimates do not see the jumps well. In the mod-PATH3DU User Guide's Example 2, `DormandPrince` is 0.3% long (exact at 1e-8); in Example 3 (the quad-patch grid of Pollock 2015), against MODFLOW 6 PRT, both are 2–7% off on short paths beside a constant-head block, where `Rk4StepDoubling` and the Verner solvers are close. The User Guide's examples use `Rk4StepDoubling`. Check results with another solver or a tighter tolerance.
+
+"FSAL" (first same as last) means the tableau's last stage is evaluated at the end point of the step. Since 0.1.7 the tracker does not reuse that velocity as the first stage of the next step. A dispersive displacement, or a move into another cell, makes it stale, so every step evaluates its first stage at the particle.
+
 !!! info "Schema Values"
     Solver names in the JSON Schema are exact string values: `"Euler"`, `"Rk4StepDoubling"`, `"DormandPrince"`, `"CashKarp"`, `"VernerRobust"`, `"VernerEfficient"`.
 
@@ -69,14 +74,14 @@ $$\mathbf{y}_\text{accepted} = \mathbf{y}_\text{double} + \frac{\mathbf{y}_\text
 5. Step-size adjustment: $h_\text{new} = S \cdot h \cdot (\varepsilon / \text{tol})^{-\alpha}$, clamped to $[\text{min\_scale} \cdot h,\; \text{max\_scale} \cdot h]$.
 
 - **Order:** 4
-- **Stages:** 4 per RK4 call × 3 calls (full + 2 half) = 12 velocity evaluations per accepted step
+- **Stages:** 4 per RK4 call × 3 calls (full step and two half steps). The full step and the first half step share their first stage, so a trial step takes 11 velocity evaluations the first time and 10 on each retry (12 before 0.1.7).
 - **Adaptive:** Yes (Richardson step-doubling)
 
 ---
 
 ## DormandPrince
 
-Dormand-Prince 5(4) embedded Runge-Kutta method (DOPRI). Uses 7 stages with a built-in error estimator from the difference between the 5th-order and 4th-order solutions. Supports FSAL (First Same As Last), reusing the last stage velocity as the first stage of the next step.
+Dormand-Prince 5(4) embedded Runge-Kutta method (DOPRI). Uses 7 stages with a built-in error estimator from the difference between the 5th-order and 4th-order solutions. Its tableau is FSAL (First Same As Last): the last stage is evaluated at the step's end point. Before 0.1.7 the tracker reused that velocity as the next step's first stage. Since 0.1.7 it evaluates the first stage at the particle at every step, because a dispersive displacement or a move into another cell can make the reused velocity stale.
 
 ### Butcher Tableau
 
@@ -95,7 +100,7 @@ b_i & 35/384 & 0 & 500/1113 & 125/192 & -2187/6784 & 11/84 & 0 \\
 
 - **Order:** 5 (with 4th-order embedded error estimate)
 - **Stages:** 7
-- **Effective evaluations per step:** 6 (due to FSAL)
+- **Velocity evaluations per step:** 7, and 6 for each retry of a rejected step
 - **Adaptive:** Yes (embedded error estimate)
 
 !!! tip
@@ -129,7 +134,7 @@ b_i & 37/378 & 0 & 250/621 & 125/594 & 0 & 512/1771 \\
 
 ## VernerRobust
 
-Verner Robust 9(6)5 embedded method. A 9-stage method with a 6th-order solution and 5th-order error estimate. Robust error estimation across a wide range of problem types. Supports FSAL.
+Verner Robust 9(6)5 embedded method. A 9-stage method with a 6th-order solution and 5th-order error estimate. Robust error estimation across a wide range of problem types. Its tableau is FSAL; as with Dormand-Prince, the last stage is not reused since 0.1.7.
 
 ### Butcher Tableau
 
@@ -146,14 +151,14 @@ $$b = \left[\frac{11}{144},\; 0,\; 0,\; \frac{256}{693},\; 0,\; \frac{125}{504},
 
 - **Order:** 6 (with 5th-order embedded error estimate)
 - **Stages:** 9
-- **Effective evaluations per step:** 8 (due to FSAL)
+- **Velocity evaluations per step:** 9, and 8 for each retry of a rejected step
 - **Adaptive:** Yes (embedded error estimate)
 
 ---
 
 ## VernerEfficient
 
-Verner Efficient 9(6)5 embedded method. Optimized for computational efficiency compared to Verner Robust while maintaining 6th-order accuracy. Supports FSAL.
+Verner Efficient 9(6)5 embedded method. Optimized for computational efficiency compared to Verner Robust while maintaining 6th-order accuracy. Its tableau is FSAL; as with Dormand-Prince, the last stage is not reused since 0.1.7.
 
 ### Butcher Tableau
 
@@ -166,7 +171,7 @@ $$c = \left[0,\; \frac{3}{50},\; \frac{1439}{15000},\; \frac{1439}{10000},\; \fr
 
 - **Order:** 6 (with 5th-order embedded error estimate)
 - **Stages:** 9
-- **Effective evaluations per step:** 8 (due to FSAL)
+- **Velocity evaluations per step:** 9, and 8 for each retry of a rejected step
 - **Adaptive:** Yes (embedded error estimate)
 
 ---

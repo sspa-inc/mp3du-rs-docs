@@ -72,7 +72,7 @@ The safety factor $S < 1$ makes step size adjustments **conservative**. Without 
 The step size scaling is clamped to prevent extreme changes:
 
 - `min_scale` — the smallest allowed scaling factor (e.g., 0.2 means the step can shrink to at most 1/5th)
-- `max_scale` — the largest allowed scaling factor (e.g., 5.0 means the step can grow to at most 5×)
+- `max_scale` — the largest allowed scaling factor (e.g., 5.0 means the step can grow to at most 5×). The embedded solvers (`DormandPrince`, `CashKarp` and the Verner solvers) also never grow a step more than fourfold, as mod-PATH3DU's Dormand-Prince does; `Rk4StepDoubling` grows it by up to `max_scale`.
 
 These limits prevent pathological behaviour where a single unusual step causes the algorithm to overshoot or collapse the step size.
 
@@ -121,3 +121,17 @@ This behavior is critical for multi-layer models. Without clamping, all higher-o
 
 !!! note "Implementation detail"
     The clamp is applied inside `velocity_at_stage()` in `mp3du-velocity/src/field.rs`, which is the common path for all stage evaluations across all solvers. The accepted particle position is handled separately by the orchestrator's layer-transition logic.
+
+### Steps That Reach a Top or Bottom Face
+
+Because every stage stays in the starting cell's layer, a step that crossed into the next layer would move at the old layer's velocity to its end. The error estimate cannot see that. Since 0.1.7 the following rules apply; the rejection, the cut and the restart follow mod-PATH3DU 2.1.9 (which shrinks a rejected step by about 12% at a time, where MP3DU-RS aims the retry 0.5% past the face), and the others are MP3DU-RS's own:
+
+- **Rejection:** a trial step that would end more than 1% of the cell's saturated thickness beyond its top or bottom face is rejected. The retry is aimed 0.5% past the face, and these rejections do not count against `max_rejects`.
+- **Cut:** an accepted step that ends beyond the face is cut there.
+  - The particle stops on the face, and the time advances by the part of the step that took it there.
+  - It is recorded, and checked for capture, in the cell it is leaving.
+  - Then it continues in the cell beyond, where its next step starts again from `initial_dt`. A boundary there that captures particles as they enter (IFACE 0 without a capture radius, 2 or 7) therefore stops the particle within one initial step of the face.
+- **No wet cell beyond:** the particle stays on the face. An IFACE 5 or 6 boundary there can capture it; otherwise it ends `ExitedDomain`, with the reason "No wet cell beyond the top face" (or bottom face).
+- **Converging flow:** where the vertical flow converges on the face from both sides, the particle cannot leave it, and ends `Stagnated`, with the reason "Stuck on a layer face".
+
+With dispersion these rules apply to the advective motion only. The dispersive displacement, made at the start of each step, is not cut, because that would shrink its random part. See [Layers and Boundaries](dispersion-theory.md#layers-and-boundaries) in Dispersion Theory.

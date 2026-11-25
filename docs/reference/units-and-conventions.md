@@ -464,12 +464,16 @@ The `final_status` field on `TrajectoryResult` is a string describing why tracki
 | `CapturedByWell` | Particle reached a well (IFACE 0) within capture radius |
 | `CapturedByBoundary` | Particle terminated by an IFACE 2/5/6/7 boundary condition |
 | `CapturedAtModelEdge` | Particle reached a domain-edge cell (`is_domain_boundary = True`) |
-| `ExitedDomain` | Particle left the grid domain, or reached its edge with the flow still pointing outward |
+| `ExitedDomain` | Particle left the grid domain, or reached its edge with the flow still pointing outward, or (since 0.1.7) stopped on a top or bottom face with no wet cell beyond |
 | `TimeLimitReached` | `capture.max_time` was reached (tracking stops at exactly that time), or `capture.max_steps` was reached; `termination_reason` says which |
-| `Stagnated` | Velocity below threshold for N consecutive steps |
+| `Stagnated` | Velocity below threshold for N consecutive steps, or held on a layer face where the vertical flow converges from both sides (since 0.1.7) |
 | `SolverFailed` | A solver error occurred |
 
 The `termination_reason` field provides additional detail for capture events.
 For boundary captures it includes the BC type name, e.g.,
-`"Internal sink/source: CONSTANT HEAD"`. For non-capture terminations it
-mirrors the `final_status` string.
+`"Internal sink/source: CONSTANT HEAD"`. For other endings it is
+`"Time limit reached"`, `"Step limit reached"`, `"Stagnation limit reached"` or `"Model Boundary"`, and since
+0.1.7 `"No wet cell beyond the top face"` (or bottom face),
+`"The particle's cell has no saturated thickness"`, or a reason starting
+`"Stuck on a layer face"`; otherwise it is an empty string, so test
+`final_status` rather than `termination_reason`.

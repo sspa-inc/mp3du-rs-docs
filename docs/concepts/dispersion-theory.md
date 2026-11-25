@@ -70,7 +70,7 @@ The GSDE of LaBolle et al. (2000) instead evaluates the dispersion at trial poin
 - Random numbers are generated using a **deterministic ChaCha8 RNG** seeded by particle ID, so a run repeated on the same computer gives the same trajectories; between platforms they can differ (see [Results on Different Platforms](../getting-started/install.md#results-on-different-platforms))
 - Each particle receives an independent random stream, and one random vector drives all the trial points of a step
 - The Wiener increment is drawn from $\mathcal{N}(0, \Delta t)$ per dimension
-- Trial points are located by position, in the particle's layer or in the layer above or below, and take the dispersivities and porosity of the cell they lie in
+- Trial points are reached the way the displacement itself is (since 0.1.8): vertically through the wet cells, then horizontally across the cells, reflected at faces and edges with no wet cell beyond, so that a trial point beyond such a face or edge is taken at its mirror image. Each takes the dispersivities and porosity of the cell it lies in
 - In backward tracking the dispersive displacement keeps its direction, while advection reverses
 
 ## Ito Formulation
@@ -121,12 +121,12 @@ mod-PATH3DU uses the **Itô convention** because it pairs naturally with the exp
 | Drift correction | From trial points ($\theta^{-1}\nabla \cdot (\theta\mathbf{D})$) | Explicit ($\nabla \cdot \mathbf{D}$) |
 | Spatial gradient of $\mathbf{D}$ required | No | Yes |
 | Extra velocity evaluations per step | Up to 5 | 8 |
-| Material interface handling | Robust | Requires care |
+| Jumps in $\mathbf{D}$ between cells | Handled | Not represented: particles gather on the side of lower dispersion |
 | Computational cost | Lower | Higher |
-| Accuracy | High | High |
+| Accuracy | First order in the step; needs short steps where $\mathbf{D}$ changes | First order in the step, where $\mathbf{D}$ is smooth |
 
 !!! tip "Which method should I use?"
-    Start with **GSDE** for most applications. It is more robust at material interfaces and computationally cheaper, and it takes dispersivities that differ between cells, which Itô refuses. Use **Ito** when you need exact Fokker–Planck consistency or are validating against analytical solutions that assume the Itô convention.
+    Start with **GSDE** for most applications. It is more robust at material interfaces and computationally cheaper, and it takes dispersivities that differ between cells, which Itô refuses. Use **Ito** when you need exact Fokker–Planck consistency or are validating against analytical solutions that assume the Itô convention, but not where the dispersion jumps between cells, as at a face between layers of different velocity.
 
 ## Step Size
 
@@ -144,6 +144,8 @@ MT3D gives 5.6%. mod-PATH3DU 2.1.9, with its own settings (step-doubling Runge-K
 
 A dispersive displacement is not checked for capture in the cells it passes through, only the advective steps after it where each ends. With long steps a particle can therefore cross a well's capture zone uncounted.
 
+Near a well the displacement can be about as large as the distance to the capture circle, so the timing of capture depends on the step and on the method. In Example 5a the fraction captured by 23,363 days differs between the GSDE and Itô by up to 0.3 percentage points: over two independent sets of 144,000 particles the gap averaged 0.13, 0.22 and 0.04 points at `max_dt` of 1,000, 250 and 62.5 days, about as much as either method changes with the step. In a test of converging flow to one well, with a known solution, both methods approach it as the step shrinks, but slowly: at steps of about a day both were still about 0.7 percentage points off.
+
 So:
 
 - **To check a result,** rerun it with `max_dt` reduced by a factor of four. Repeat until it stops changing within the Monte Carlo error.
@@ -155,21 +157,32 @@ A test of the boundaries: a column of length $L = 10$ with uniform upward flow a
 
 Since 0.1.7 a step with dispersion has two parts (a step here is the interval between two dispersive displacements; the advective motion within it can take several solver steps):
 
-- **The dispersive displacement comes first,** computed where the particle is. It is not cut at the first face it crosses, because that would shrink its random part: its vertical part is followed through every cell it reaches, measured in each cell's saturated thickness. At a face with no wet cell beyond (the top or bottom of the model, a dry cell, or the water table) it is reflected, as a random walk must be at a boundary through which no solute disperses.
+- **The dispersive displacement comes first,** computed where the particle is. It is not cut at the first face it crosses, because that would shrink its random part: its vertical part is followed through every cell it reaches, measured in each cell's saturated thickness. At a face with no wet cell beyond (the top or bottom of the model, a dry cell, or the water table) it is reflected, as a random walk must be at a boundary through which no solute disperses. Since 0.1.8 its horizontal part is followed in the same way across the cells' footprints, in the layer the vertical part reached, and reflected at an edge with no wet cell beyond: the edge of the grid, or an inactive or dry cell.
 - **The particle then moves by advection from where it lands,** for the length of the step, as a particle without dispersion would (see [Steps That Reach a Top or Bottom Face](adaptive-stepping.md#steps-that-reach-a-top-or-bottom-face)). It leaves through a face with no wet cell beyond only where the flow carries it out, as with the usual zero-gradient (Danckwerts) outflow condition. A boundary on that face can capture it; otherwise it ends `ExitedDomain`.
 
 The next displacement comes when the step's full length has passed, however the advective motion was divided at faces, and the length of the next step follows the solver's error control as if there were no faces. Where the flow is uniform, the result therefore does not depend on how the model is divided into layers. Where the velocity varies within the cells and the steps may grow (`initial_dt` below `max_dt`), the steps in thin layers, where most advective steps are cut at a face, stay near `initial_dt`, while in a thick layer they follow the solver's error control. Keep `initial_dt` no larger than a step you would accept for the dispersion. A particle that reaches a face where the vertical flow converges from both sides ends there `Stagnated`, with or without dispersion.
 
 Before 0.1.7, a step that spanned more than one layer stopped on the next layer's far face, which reduced the vertical spread in thin layers. A particle dispersed through a no-flow top or bottom was lost.
 
+Before 0.1.8, a displacement that ended outside the grid ended the particle (`ExitedDomain`), so particles were lost through the sides of a model, most in cross-sections one row wide (99 of 200 in the User Guide's Example 2b). The GSDE also dropped a displacement whose first trial point lay outside the grid. Its trial points are now reached the way the displacement is, so that one beyond a face or edge with no wet cell beyond is taken at its mirror image.
+
 !!! warning "Known issue: an empty strip next to an inflow face"
     Where water enters through a face with no wet cell beyond, such as the bottom of a model with upward flow or a water table with recharge, the dispersive part of a step is reflected at the face and the advective part then moves the particle away from it. No particle therefore ends a step closer to the face than that step's advective displacement. In the test column above, with steps of a twentieth of the transit time, that strip was empty where the exact solution holds 3.6% of the solute then in the column (Peclet number 1). The strip narrows as the step shrinks.
 
-!!! warning "Known issue: the GSDE next to a face where the dispersion changes with depth"
-    A trial point of the GSDE beyond a top or bottom face with no wet cell beyond is evaluated at the face. Where the dispersion coefficient changes with depth, an evenly mixed solute then does not stay evenly mixed next to the face: in a test with the vertical dispersion doubling from bottom to top, the density in the bottom tenth of the column was 5% too high with steps of 1 and 12% with steps of 5. In the column test with the velocity rising by 10% per unit height and a Peclet number of 1, the solute left after one transit time was 31% too high with steps of 0.5 and 13% with steps of 0.1. The Itô method keeps an evenly mixed solute evenly mixed (within 1%), and was within 3.5% in that column test.
+!!! warning "Known issue: the GSDE needs short steps where the dispersion changes"
+    Since 0.1.8 a GSDE trial point beyond a face with no wet cell beyond is taken at its mirror image, and an evenly mixed solute no longer gathers at such a face. Up to 0.1.7, with the vertical dispersion doubling from bottom to top, the bottom tenth held 5% too much with steps of 1 and 12% with steps of 5. The GSDE is accurate only when a step's dispersive displacement is small against the distance over which the dispersion changes. In a layer 10 thick with a transverse vertical dispersivity of 1: with the dispersion doubling over the layer, the faces held about 5% too little at steps of 5; with it quadrupling, 9.5% too little at steps of 1, and at steps of 5 up to 17% too little at the faces and 30% too much in places inside. Up to 0.1.7, in the column test with the velocity rising by 10% per unit height and a Peclet number of 1, the solute left after one transit time was 31% too high with steps of 0.5 and 13% with steps of 0.1; that test has not been rerun since the fix. The Itô method keeps such a column evenly mixed within about 3%, but see the next box.
+
+!!! warning "Known issue: Itô at jumps in the dispersion"
+    The Itô method takes its drift from differences of the dispersion tensor, which cannot represent a jump in it, or in its principal directions, between cells. At a face between layers of different velocity it gathers particles on the side of lower dispersion: in two evenly mixed layers with the dispersion four times higher in the upper one, the share in that layer came out at 0.24 to 0.35 instead of 0.5 (at steps of 0.5 to 5). In dipping layers its difference probes, taken at fixed elevations, can also move particles out of the model. Use the GSDE in layered models.
 
 !!! warning "Known issue: jumps in porosity"
-    At a jump in porosity between layers, the GSDE does not keep an evenly mixed solute evenly mixed: layers of lower porosity collect too many particles. In a test across one interface, with porosity four times higher below, 77.8% of the particles ended below, against an exact 80%, whatever the step size. Jumps in dispersivity or velocity alone are handled. This has been so since 0.1.5 and is not yet fixed.
+    At a jump in porosity between layers, the GSDE does not keep an evenly mixed solute evenly mixed: layers of lower porosity collect too many particles. In a test across one interface, with porosity four times higher on one side, 77.2% of the particles ended on that side at short steps, against an exact 80%, and fewer at longer steps (72.2% at steps of 2, 66.5% at 5). In a reply to a comment, the GSDE's authors state that it does not apply where porosity is discontinuous (LaBolle and Zhang, 2006). Jumps in dispersivity or velocity alone are handled. This has been so since 0.1.5 and is not yet fixed.
+
+!!! warning "Known issue: layers whose thickness changes from cell to cell"
+    A horizontal move keeps the particle's position as a fraction of the layer's thickness. The GSDE then lacks a drift $\mathbf{D}\nabla b / b$, with $b$ the saturated thickness, where the thickness changes. At a step in thickness under a constant discharge, an evenly mixed solute is depleted next to the step on the thicker side when the flow runs from thick to thin (to about 0.7 to 0.9, within about $\alpha_L$ of the step), and over-filled by about 1.3 to 1.5 times on the thinner side when it runs the other way. Itô did not show it in the tests, probably because it cannot see such a jump at all. mod-PATH3DU 2.1.9 has the same.
+
+!!! warning "Known issue: reflection at oblique walls"
+    Displacements are reflected as in a mirror. That is exact where the flow runs along the wall, as at a no-flow wall. Where the flow meets a reflecting edge obliquely, as at the edge of a water-level map that flow leaves, positions along the edge come out up to about one longitudinal dispersivity off.
 
 ## Configuration
 
@@ -212,6 +225,7 @@ See [Dispersion Methods](../reference/dispersion-methods.md) for the complete pa
 The dispersion methods in mod-PATH3DU are based on the following references:
 
 - **LaBolle, E.M., Fogg, G.E., and Tompson, A.F.B.** (1996). Random-walk simulation of transport in heterogeneous porous media: Local mass-conservation problem and implementation methods. *Water Resources Research*, 32(3), 583–593.
+- **LaBolle, E.M., and Zhang, Y.** (2006). Reply to comment by D.-H. Lim on "Diffusion processes in composite porous media and their numerical integration by random walks: Generalized stochastic differential equations with discontinuous coefficients". *Water Resources Research*, 42, W02602. doi:10.1029/2005WR004403.
 - **LaBolle, E.M., Quastel, J., Fogg, G.E., and Gravner, J.** (2000). Diffusion processes in composite porous media and their numerical integration by random walks: Generalized stochastic differential equations with discontinuous coefficients. *Water Resources Research*, 36(3), 651–662.
 - **Salamon, P., Fernàndez-Garcia, D., and Gómez-Hernández, J.J.** (2006). A review and numerical assessment of the random walk particle tracking method. *Journal of Contaminant Hydrology*, 87(3-4), 277–305.
 - **Burnett, R.D. and Frind, E.O.** (1987). Simulation of contaminant transport in three dimensions: 2. Dimensionality effects. *Water Resources Research*, 23(4), 695–705.

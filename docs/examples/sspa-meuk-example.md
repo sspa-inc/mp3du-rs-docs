@@ -104,7 +104,7 @@ For the **validation workflow** (with dispersion, Monte Carlo repeats):
 - Each particle is run many times (100–5000 realisations) with random dispersion, for each tracking set-up.
 - The endpoints of the particles still in the aquifer are binned into a concentration grid and compared against the mod-PATH3DU reference. Particles captured by the wells are excluded, as in the reference, so both grids show the mass remaining in the aquifer.
 
-The fraction of particles still in the aquifer, with MP3DU-RS 0.1.7 at 1,000 repeats (144,000 particles):
+The fraction of particles still in the aquifer, with MP3DU-RS 0.1.7 at 1,000 repeats (144,000 particles). In this single-layer model 0.1.8 gives the same 135,420 particles still in the aquifer at 23,363 days with `dopri_1000`; the other times and `cpp_input` were not rerun on 0.1.8:
 
 | | 5,044 days | 23,363 days | 50,000 days |
 |---|---|---|---|

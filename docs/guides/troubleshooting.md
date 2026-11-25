@@ -146,6 +146,7 @@ See [Schema Reference](../reference/schema-reference.md) for field specification
 
 - Verify starting coordinates: ensure $(x, y, z)$ is inside the polygon of `cell_id` and between the cell's top and bottom elevations
 - If particles are exiting unexpectedly, check that the flow field is correctly loaded and the grid boundary conditions are as expected
+- **With dispersion, up to 0.1.7,** a dispersive displacement across the side of the grid, or into an inactive cell, ended the particle `ExitedDomain`. Cross-sections one row wide lost many particles that way. Since 0.1.8 such a displacement is reflected; upgrade with `--upgrade`.
 
 ### Simulation hangs or is very slow
 

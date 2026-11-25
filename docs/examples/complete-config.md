@@ -27,7 +27,7 @@ A fully-specified `SimulationConfig` JSON exercising all available options, incl
 |-------|-------|-------------|
 | `tolerance` | `1e-6` | Local error tolerance for step acceptance, as a fraction of the model extent |
 | `safety` | `0.9` | Safety factor for step-size prediction |
-| `alpha` | `0.2` | PI controller exponent |
+| `alpha` | `0.2` | Exponent of the step-size controller |
 | `min_scale` | `0.2` | Minimum step-size scale factor |
 | `max_scale` | `5.0` | Maximum step-size scale factor |
 | `max_rejects` | `10` | Maximum consecutive rejected steps |

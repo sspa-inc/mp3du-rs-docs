@@ -11,7 +11,7 @@ mod-PATH3DU provides six Runge-Kutta ODE integration solvers for computing parti
 | DormandPrince | 5(4) | 7 | Yes | Yes | Yes | Default choice — best accuracy/cost ratio |
 | CashKarp | 5(4) | 6 | Yes | Yes | No | Alternative to Dormand-Prince |
 | VernerRobust | 6(5) | 9 | Yes | Yes | Yes | High accuracy, robust error estimation |
-| VernerEfficient | 6(5) | 9 | Yes | Yes | Yes | Highest accuracy, smooth velocity fields |
+| VernerEfficient | 6(5) | 9 | Yes | Yes | Yes | High accuracy (see the note below) |
 
 !!! info "Schema Values"
     Solver names in the JSON Schema are exact string values: `"Euler"`, `"Rk4StepDoubling"`, `"DormandPrince"`, `"CashKarp"`, `"VernerRobust"`, `"VernerEfficient"`.
@@ -153,7 +153,7 @@ $$b = \left[\frac{11}{144},\; 0,\; 0,\; \frac{256}{693},\; 0,\; \frac{125}{504},
 
 ## VernerEfficient
 
-Verner Efficient 9(6)5 embedded method. Optimized for computational efficiency compared to Verner Robust while maintaining 6th-order accuracy. Uses rational coefficients with large numerators/denominators for maximum numerical precision. Supports FSAL.
+Verner Efficient 9(6)5 embedded method. Optimized for computational efficiency compared to Verner Robust while maintaining 6th-order accuracy. Supports FSAL.
 
 ### Butcher Tableau
 
@@ -162,7 +162,7 @@ Node fractions $c_i$:
 $$c = \left[0,\; \frac{3}{50},\; \frac{1439}{15000},\; \frac{1439}{10000},\; \frac{4973}{10000},\; \frac{389}{400},\; \frac{1999}{2000},\; 1,\; 1\right]$$
 
 !!! note
-    The complete stage coefficient matrix is available in the source code at `mp3du-rs/crates/mp3du-solver/src/tableaux.rs`. Verner Efficient uses very large rational coefficients optimized for extended precision.
+    The complete stage coefficient matrix is available in the source code at `mp3du-rs/crates/mp3du-solver/src/tableaux.rs`. Its coefficients are exact rationals with large numerators and denominators, and several are also large in value: up to 208 in the stage matrix and 176 in the weights, with cancelling signs; the weights are large because the nodes 389/400, 1999/2000 and 1 lie close together. In a test on a smooth analytic field this did no harm: single steps of up to 200 m ended within 0.13 m of the true end point, as with the other solvers. Where the velocity jumps at cell faces, as the Waterloo field of the test model did, by a median of about half a percent in speed at a cell face, the jump is amplified: on that Voronoi grid, four single steps of 63 to 198 m along one pathline missed the end point of a tight-tolerance reference solution by 4 to 178 m, where the other solvers missed by at most 2 m. The error estimate amplifies the jump nearly as much, so adaptive stepping rejects such trial steps and retries with smaller ones. In a separate adaptive run that tracked the same particle to the well (tolerance 1e-5), the steps VernerEfficient accepted ended closer to a converged solution than those of DormandPrince (median miss per step 0.85 cm against 3.3 cm; VernerRobust 0.11 cm), for more velocity evaluations (793 against 419).
 
 - **Order:** 6 (with 5th-order embedded error estimate)
 - **Stages:** 9

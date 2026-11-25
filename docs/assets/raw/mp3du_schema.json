@@ -29,7 +29,7 @@
         "VernerRobust",
         "VernerEfficient"
       ],
-      "description": "Runge-Kutta solver variant for particle integration. `Euler` uses a fixed step (non-adaptive). `Rk4StepDoubling` is a classic RK4 with step-doubling error control. `DormandPrince` is the recommended default (embedded 4/5 pair). `CashKarp` is an alternative 4/5 pair. `VernerRobust` and `VernerEfficient` are 6/7 pairs for high-accuracy work."
+      "description": "Runge-Kutta solver variant for particle integration. `Euler` uses a fixed step (non-adaptive). `Rk4StepDoubling` is a classic RK4 with step-doubling error control. `DormandPrince` is the recommended default (embedded 4/5 pair). `CashKarp` is an alternative 4/5 pair. `VernerRobust` and `VernerEfficient` are 5/6 pairs (6th-order solution, 5th-order error estimate) for high-accuracy work."
     },
     "adaptive": {
       "type": "object",
@@ -58,7 +58,7 @@
         "alpha": {
           "type": "number",
           "exclusiveMinimum": 0,
-          "description": "Exponent in the step-scaling formula h_new = h × S × (tol/err)^alpha. Derived from the solver order: for a method of order p, the optimal value is 1/(p+1). Use 0.2 for 4th/5th-order pairs (DormandPrince, CashKarp) and ~0.125 for 6th/7th-order pairs (Verner)."
+          "description": "Exponent in the step-scaling formula h_new = h × S × (tol/err)^alpha. Derived from the solver order: for a pair of orders p and p+1, the usual value is 1/(p+1). Use 0.2 for the 4th/5th-order pairs (DormandPrince, CashKarp) and for Rk4StepDoubling, and 1/6 (about 0.167) for the 5th/6th-order Verner pairs."
         },
         "min_scale": {
           "type": "number",

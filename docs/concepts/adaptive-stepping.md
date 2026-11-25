@@ -57,11 +57,11 @@ where:
 |-----------|-------------|---------------|
 | $h$ | Current step size | — |
 | $S$ | Safety factor | 0.9 |
-| $\alpha$ | Scaling exponent | 0.2 (for a 5th-order pair) |
+| $\alpha$ | Scaling exponent | 0.2 (for a 4th/5th-order pair) |
 | $\text{tol}$ | User-specified tolerance | $10^{-6}$ |
 | $\text{err}$ | Estimated error from the embedded pair | — |
 
-The scaling exponent $\alpha$ is derived from the order of the embedded pair. For a method of order $p$, the optimal exponent is $\alpha = 1/(p+1)$.
+The scaling exponent $\alpha$ is derived from the order of the error estimate. For a pair of orders $p$ and $p+1$, the usual exponent is $\alpha = 1/(p+1)$: 0.2 for the 4th/5th-order pairs (DormandPrince, CashKarp) and for Rk4StepDoubling, whose step-doubling estimate is the error of its 4th-order step, and 1/6 (about 0.167) for the 5th/6th-order Verner pairs.
 
 ## Safety Factor
 
@@ -103,13 +103,13 @@ The top-level `initial_dt` and `max_dt` fields control the starting step size an
 | `Rk4StepDoubling` | Yes | Step doubling (compares full and half steps) |
 | `DormandPrince` | Yes | Embedded pair (4th/5th order) |
 | `CashKarp` | Yes | Embedded pair (4th/5th order) |
-| `VernerRobust` | Yes | Embedded pair (6th/7th order) |
-| `VernerEfficient` | Yes | Embedded pair (6th/7th order) |
+| `VernerRobust` | Yes | Embedded pair (5th/6th order) |
+| `VernerEfficient` | Yes | Embedded pair (5th/6th order) |
 
 See [Solver Methods](../reference/solver-methods.md) for full mathematical details and Butcher tableaux for each solver.
 
 !!! tip
-    Start with **DormandPrince** and the default tolerance ($10^{-6}$). Tighten the tolerance only if you need higher accuracy and can afford the computational cost. Switch to **VernerRobust** or **VernerEfficient** for problems requiring very high accuracy.
+    Start with **DormandPrince** and the default tolerance ($10^{-6}$). Tighten the tolerance only if you need higher accuracy and can afford the computational cost. Switch to **VernerRobust** or **VernerEfficient** for problems requiring very high accuracy; for the Waterloo field, see the note on VernerEfficient in [Solver Methods](../reference/solver-methods.md#vernerefficient).
 
 ## Stage Coordinate Handling in Layered Models
 

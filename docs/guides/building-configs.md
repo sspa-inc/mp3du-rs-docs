@@ -117,8 +117,8 @@ Choose one of the six available solvers:
 | `Rk4StepDoubling` | 4 | Yes | General purpose |
 | `DormandPrince` | 4/5 | Yes | **Recommended default** |
 | `CashKarp` | 4/5 | Yes | Stiff-ish problems |
-| `VernerRobust` | 6/7 | Yes | High accuracy |
-| `VernerEfficient` | 6/7 | Yes | High accuracy, fewer stages |
+| `VernerRobust` | 5/6 | Yes | High accuracy |
+| `VernerEfficient` | 5/6 | Yes | High accuracy |
 
 See [Solver Methods](../reference/solver-methods.md) for mathematical details.
 
@@ -139,7 +139,7 @@ See [Solver Methods](../reference/solver-methods.md) for mathematical details.
 
 1. **tolerance** — Error threshold for step acceptance, as a fraction of the model extent. Smaller = more accurate, slower.
 2. **safety** — Multiplier applied to the optimal step size (typically 0.8–0.95). Prevents frequent rejections.
-3. **alpha** — Exponent in the step-scaling formula. For a 5th-order pair, use 0.2.
+3. **alpha** — Exponent in the step-scaling formula. Use 0.2 for DormandPrince, CashKarp and Rk4StepDoubling, and 1/6 (about 0.167) for the Verner pairs.
 4. **min_scale** — Minimum step-size reduction factor. Step can shrink to at most `min_scale × h`.
 5. **max_scale** — Maximum step-size growth factor. Step can grow to at most `max_scale × h`.
 6. **max_rejects** — Maximum consecutive rejected steps before the solver gives up.

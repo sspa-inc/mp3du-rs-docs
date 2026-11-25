@@ -21,7 +21,7 @@ Configuration contract for `SimulationConfig`. Generated from `docs/assets/raw/m
 | Property | Type | Required | Default | Constraints | Description |
 |----------|------|----------|---------|-------------|-------------|
 | `velocity_method` | string | Yes | — | one of: `Waterloo` | Velocity-method selector used by the SimulationConfig schema. Currently only `Waterloo` is accepted here. SSP&A workflows still use `Waterloo` in the config because the SSP&A velocity field is fitted outside the JSON config and then tracked through the same runtime interface. |
-| `solver` | string | Yes | — | one of: `Euler`, `Rk4StepDoubling`, `DormandPrince`, `CashKarp`, `VernerRobust`, `VernerEfficient` | Runge-Kutta solver variant for particle integration. `Euler` uses a fixed step (non-adaptive). `Rk4StepDoubling` is a classic RK4 with step-doubling error control. `DormandPrince` is the recommended default (embedded 4/5 pair). `CashKarp` is an alternative 4/5 pair. `VernerRobust` and `VernerEfficient` are 6/7 pairs for high-accuracy work. |
+| `solver` | string | Yes | — | one of: `Euler`, `Rk4StepDoubling`, `DormandPrince`, `CashKarp`, `VernerRobust`, `VernerEfficient` | Runge-Kutta solver variant for particle integration. `Euler` uses a fixed step (non-adaptive). `Rk4StepDoubling` is a classic RK4 with step-doubling error control. `DormandPrince` is the recommended default (embedded 4/5 pair). `CashKarp` is an alternative 4/5 pair. `VernerRobust` and `VernerEfficient` are 5/6 pairs (6th-order solution, 5th-order error estimate) for high-accuracy work. |
 | `adaptive` | object | Yes | — | — | Adaptive time-stepping parameters that control how the solver adjusts dt between integration steps. All fields are required even when using the non-adaptive Euler solver. |
 | `dispersion` | object (`"None"` \| `"Gsde"` \| `"Ito"`) | Yes | — | — | Dispersion model configuration. Choose `None` for pure advection, `Gsde` for the generalised stochastic differential equation method, or `Ito` for the Itô-calculus formulation. When dispersion is enabled, each particle run is stochastic — run multiple realisations (Monte Carlo) to build concentration fields. The dispersivities are given either here (alpha_l, alpha_th and alpha_tv, all three, the same in every cell) or per cell to hydrate_cell_properties() or hydrate_sspa_inputs(), never both: with dispersion on, a run that gives them both ways, or neither, stops with an error. |
 | `retardation_enabled` | boolean | Yes | — | — | Reserved for retardation, which MP3DU-RS does not apply yet: the value has no effect. (mod-PATH3DU's RETARDATION option multiplies each cell's porosity by its retardation factor.) |
@@ -36,7 +36,7 @@ Configuration contract for `SimulationConfig`. Generated from `docs/assets/raw/m
 |----------|------|----------|---------|-------------|-------------|
 | `tolerance` | number | Yes | — | > 0 | Local truncation error threshold for step acceptance. The solver compares its embedded-pair error estimate against this value; steps with error ≤ tolerance are accepted. The error is measured as a fraction of the model extent in each direction. Smaller values produce more accurate trajectories but require more (smaller) steps. Typical starting value: 1e-6. |
 | `safety` | number | Yes | — | > 0 | Safety factor (S) applied when computing the next step size: h_new = h × S × (tol/err)^alpha. Values < 1 (typically 0.8–0.95) make step-size growth conservative, reducing the chance of immediate rejection on the next step. Recommended: 0.9. |
-| `alpha` | number | Yes | — | > 0 | Exponent in the step-scaling formula h_new = h × S × (tol/err)^alpha. Derived from the solver order: for a method of order p, the optimal value is 1/(p+1). Use 0.2 for 4th/5th-order pairs (DormandPrince, CashKarp) and ~0.125 for 6th/7th-order pairs (Verner). |
+| `alpha` | number | Yes | — | > 0 | Exponent in the step-scaling formula h_new = h × S × (tol/err)^alpha. Derived from the solver order: for a pair of orders p and p+1, the usual value is 1/(p+1). Use 0.2 for the 4th/5th-order pairs (DormandPrince, CashKarp) and for Rk4StepDoubling, and 1/6 (about 0.167) for the 5th/6th-order Verner pairs. |
 | `min_scale` | number | Yes | — | > 0 | Minimum allowed step-size scaling factor. After a rejected step the new dt cannot shrink below min_scale × current dt. Prevents pathological collapse of the step size. Typical value: 0.2 (step can shrink to at most 1/5th). |
 | `max_scale` | number | Yes | — | > 0 | Maximum allowed step-size scaling factor. After an accepted step the new dt cannot grow beyond max_scale × current dt. Prevents overshooting into a region where the step would be rejected. Typical value: 5.0. |
 | `max_rejects` | integer | Yes | — | ≥ 0 | Maximum number of consecutive rejected steps before the solver terminates the particle with an error. Increase this (e.g. to 50) if particles encounter sharp velocity gradients that need many successive reductions. Default recommendation: 10. |
@@ -133,7 +133,7 @@ The `dispersion` property uses one of the following variant schemas:
             "VernerRobust",
             "VernerEfficient"
           ],
-          "description": "Runge-Kutta solver variant for particle integration. `Euler` uses a fixed step (non-adaptive). `Rk4StepDoubling` is a classic RK4 with step-doubling error control. `DormandPrince` is the recommended default (embedded 4/5 pair). `CashKarp` is an alternative 4/5 pair. `VernerRobust` and `VernerEfficient` are 6/7 pairs for high-accuracy work."
+          "description": "Runge-Kutta solver variant for particle integration. `Euler` uses a fixed step (non-adaptive). `Rk4StepDoubling` is a classic RK4 with step-doubling error control. `DormandPrince` is the recommended default (embedded 4/5 pair). `CashKarp` is an alternative 4/5 pair. `VernerRobust` and `VernerEfficient` are 5/6 pairs (6th-order solution, 5th-order error estimate) for high-accuracy work."
         },
         "adaptive": {
           "type": "object",
@@ -162,7 +162,7 @@ The `dispersion` property uses one of the following variant schemas:
             "alpha": {
               "type": "number",
               "exclusiveMinimum": 0,
-              "description": "Exponent in the step-scaling formula h_new = h \u00d7 S \u00d7 (tol/err)^alpha. Derived from the solver order: for a method of order p, the optimal value is 1/(p+1). Use 0.2 for 4th/5th-order pairs (DormandPrince, CashKarp) and ~0.125 for 6th/7th-order pairs (Verner)."
+              "description": "Exponent in the step-scaling formula h_new = h \u00d7 S \u00d7 (tol/err)^alpha. Derived from the solver order: for a pair of orders p and p+1, the usual value is 1/(p+1). Use 0.2 for the 4th/5th-order pairs (DormandPrince, CashKarp) and for Rk4StepDoubling, and 1/6 (about 0.167) for the 5th/6th-order Verner pairs."
             },
             "min_scale": {
               "type": "number",

@@ -28,7 +28,7 @@ The smallest valid `SimulationConfig` JSON for mod-PATH3DU. Every required field
 |-------|-------|-------------|
 | `tolerance` | `1e-6` | Local error tolerance for step acceptance, as a fraction of the model extent |
 | `safety` | `0.9` | Safety factor applied to predicted optimal step size |
-| `alpha` | `0.2` | PI controller exponent for step-size scaling |
+| `alpha` | `0.2` | Exponent of the step-size controller |
 | `min_scale` | `0.2` | Minimum step-size scale factor (prevents drastic shrinkage) |
 | `max_scale` | `5.0` | Maximum step-size scale factor (prevents drastic growth) |
 | `max_rejects` | `10` | Maximum consecutive rejected steps before error |

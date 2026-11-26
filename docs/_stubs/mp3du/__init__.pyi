@@ -24,6 +24,25 @@ class WaterlooConfig:
             increase memory and solve time. Default is ``35``.
         n_control_points: Number of control points distributed inside the
             fitting domain. Must be ≥ ``order_of_approx``. Default is ``122``.
+
+    Since 0.1.9 the config also caches the fit of each cell. A cell's fit is a
+    least-squares solve that is linear in the cell's flows, so the matrix that
+    turns flows into coefficients depends only on the cell's geometry and on
+    this configuration. The config keeps that matrix for every cell a particle
+    has visited, and ``fit_waterloo()`` reuses it for a cell whose geometry is
+    the same, bit for bit. Results are the same whether or not a matrix is
+    reused.
+
+    - **Transient models:** create one ``WaterlooConfig`` and pass the same
+      object to ``fit_waterloo()`` at every time step. Only the first fit of
+      each cell pays for the decomposition; later refits take about a
+      microsecond per cell instead of about a millisecond.
+    - **Memory:** about 4 KB per visited cell (4.5 KB for a cell with 6 faces)
+      while the config is kept. A config that is not kept (built inline in the
+      call) holds nothing. After a run that visits very many cells, call
+      ``clear_cache()``.
+    - **One config per grid:** alternating one config between two grids
+      rebuilds every matrix each time.
     """
 
     def __init__(self, order_of_approx: int = 35, n_control_points: int = 122) -> None: ...
@@ -36,6 +55,30 @@ class WaterlooConfig:
     @property
     def n_control_points(self) -> int:
         """Number of control points used in the polynomial least-squares fit."""
+        ...
+
+    def cache_info(self) -> Dict[str, int]:
+        """What the fit-operator cache holds (new in 0.1.9).
+
+        Returns:
+            A dict with ``slots`` (cells with an operator stored), ``operators``
+            (of those, how many are built), ``hits`` (cell fits served by a
+            stored operator), ``builds`` (operators built), ``replaced``
+            (builds that replaced a stored operator because the cell's geometry
+            or the configuration changed) and ``memory_bytes`` (an estimate of
+            the memory held). The counts run from the creation of the config
+            or the last ``clear_cache()``. Cells are fitted when a particle
+            first needs them, so the counts grow during ``run_simulation()``,
+            not in ``fit_waterloo()``.
+        """
+        ...
+
+    def clear_cache(self) -> None:
+        """Drop every stored fit operator and reset the counts (new in 0.1.9).
+
+        Fields already fitted are not affected; cells they have not fitted yet
+        get a new operator when a particle first visits them.
+        """
         ...
 
 

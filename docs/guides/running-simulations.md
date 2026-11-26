@@ -180,7 +180,10 @@ field = mp3du.fit_waterloo(
 print(f"Field: {field.method_name()}, {field.n_cells()} cells")
 ```
 
-The fitting step computes polynomial velocity coefficients for every cell. This is the most computationally expensive setup step — it only needs to be done once per flow field configuration.
+The fitting step computes polynomial velocity coefficients for each cell a particle visits, when the particle first reaches it. That fit is the most expensive part of the setup.
+
+!!! tip "Transient models: reuse one `WaterlooConfig` (since 0.1.9)"
+    A cell's fit depends on its flows only through one small matrix, which depends only on the cell's shape. The `WaterlooConfig` keeps that matrix for every cell visited, so refitting the same grid to new flows in each time step costs about a microsecond per cell instead of about a millisecond. Create the config once and pass the same object to `fit_waterloo()` at every step. A kept config holds about 4 KB per visited cell: after a run that visits very many cells, call `waterloo_cfg.clear_cache()`, and use one config per grid. `waterloo_cfg.cache_info()` reports what is held.
 
 ## Creating the Configuration
 
